@@ -87,3 +87,39 @@ if(VELOX_ENABLE_ARROW)
                                            ${ARROW_LIBDIR}/libparquet.a)
 
 endif()
+
+
+if(VELOX_ENABLE_QPL)
+  message(STATUS "Building QPL from source")
+  set(QPL_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/qpl_ep/install")
+  set(QPL_STATIC_LIB_NAME ${CMAKE_STATIC_LIBRARY_PREFIX}qpl${CMAKE_STATIC_LIBRARY_SUFFIX})
+  set(QPL_STATIC_LIB "${QPL_PREFIX}/lib/${QPL_STATIC_LIB_NAME}")
+
+  set(QPL_CMAKE_ARGS
+    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+    -DCMAKE_INSTALL_LIBDIR=${QPL_PREFIX}/lib
+    -DCMAKE_INSTALL_PREFIX=${QPL_PREFIX})
+
+  set(QPL_PATCH_COMMAND
+      "sed" "-i" "17,18d"
+      "${CMAKE_CURRENT_BINARY_DIR}/qpl_ep-prefix/src/qpl_ep/tools/CMakeLists.txt")
+
+  ExternalProject_Add(qpl_ep
+                      ${EP_LOG_OPTIONS}
+                      URL https://github.com/intel/qpl/archive/refs/tags/v0.2.1.tar.gz
+                      PATCH_COMMAND ${QPL_PATCH_COMMAND}
+                      BUILD_BYPRODUCTS "${QPL_STATIC_LIB}"
+                      CMAKE_ARGS ${QPL_CMAKE_ARGS})
+
+  file(MAKE_DIRECTORY "${QPL_PREFIX}/include")
+
+  add_library(qpl::qpl STATIC IMPORTED GLOBAL)
+  set(QPL_LIBRARIES ${QPL_STATIC_LIB})
+  set(QPL_INCLUDE_DIRS "${QPL_PREFIX}/include")
+  set_target_properties(qpl::qpl
+                        PROPERTIES IMPORTED_LOCATION ${QPL_LIBRARIES}
+                                   INTERFACE_INCLUDE_DIRECTORIES ${QPL_INCLUDE_DIRS})
+
+  add_dependencies(qpl::qpl qpl_ep)
+
+endif()

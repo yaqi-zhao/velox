@@ -21,6 +21,9 @@
 #include "velox/vector/TypeAliases.h"
 
 #include <folly/Range.h>
+#ifdef VELOX_ENABLE_QPL
+#include <qpl/qpl.h>
+#endif
 
 namespace facebook::velox::dwio::common {
 
@@ -598,6 +601,7 @@ static inline void unpack32(
 
 #endif
 
+#ifndef VELOX_ENABLE_QPL
 template <>
 inline void unpack<uint8_t>(
     const uint8_t* FOLLY_NONNULL& inputBits,
@@ -641,6 +645,42 @@ inline void unpack<uint8_t>(
 
 #endif
 }
+
+#else
+template <>
+inline void unpack<uint8_t>(const uint8_t* FOLLY_NONNULL& inputBits,
+    uint64_t inputBufferLen,
+    uint64_t numValues,
+    uint8_t bitWidth,
+    uint8_t* FOLLY_NONNULL& result) {
+  uint32_t size = 0;
+  // Job initialization
+  qpl_status status = qpl_get_job_size(qpl_path_hardware, &size);
+  VELOX_DCHECK_EQ(status, QPL_STS_OK);
+
+  std::unique_ptr<uint8_t[]> job_buffer = std::make_unique<uint8_t[]>(size);
+  auto job = reinterpret_cast<qpl_job *>(job_buffer.get());
+  status = qpl_init_job(qpl_path_hardware, job);
+  VELOX_DCHECK(status == QPL_STS_OK, "Initialization of QPL Job failed");
+
+  job->next_in_ptr = const_cast<uint8_t*>(inputBits);
+  job->available_in = static_cast<uint32_t>(inputBufferLen);
+  job->next_out_ptr = result;;
+  job->available_out = static_cast<uint32_t>(numValues);
+  job->op = qpl_op_expand;
+  job->src1_bit_width = bitWidth;
+  job->src2_bit_width = 8;
+  job->num_input_elements = numValues;
+  job->out_bit_width = qpl_ow_8;
+
+  status = qpl_execute_job(job);
+  VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
+
+  std::free(job);
+  return;
+}
+#endif
+
 
 template <>
 inline void unpack<uint16_t>(

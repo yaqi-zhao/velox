@@ -50,6 +50,12 @@ add_library(
   SeekableInputStream.cpp
   TypeWithId.cpp)
 
+set(QPL_STATIC_LINK_LIBS ${QPL_STATIC_LINK_LIBS})
+if(VELOX_ENABLE_QPL)
+  list(APPEND QPL_STATIC_LINK_LIBS qpl::qpl)
+endif()
+
+message(STATUS "QPL_STATIC_LINK_LIBS: ${QPL_STATIC_LINK_LIBS}")
 target_link_libraries(
   velox_dwio_common
   velox_buffer
@@ -60,5 +66,6 @@ target_link_libraries(
   velox_exception
   velox_memory
   Boost::regex
+  ${QPL_STATIC_LINK_LIBS}
   ${FOLLY_WITH_DEPENDENCIES}
   glog::glog)
