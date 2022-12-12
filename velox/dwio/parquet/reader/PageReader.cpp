@@ -25,6 +25,7 @@
 #include <thrift/protocol/TCompactProtocol.h> //@manual
 #include <zlib.h>
 #include <zstd.h>
+#include "compression_qpl.h"
 
 namespace facebook::velox::parquet {
 
@@ -216,6 +217,27 @@ const char* FOLLY_NONNULL PageReader::uncompressData(
           "GZipCodec failed: {}",
           stream.msg ? stream.msg : "");
       return uncompressedData_->as<char>();
+    }
+    case thrift::CompressionCodec::QPL:{
+      dwio::common::ensureCapacity<char>(
+        uncompressedData_, uncompressedSize, &pool_);
+
+      Qplcodec *qpl_dec=new Qplcodec(qpl_path_hardware,(qpl_compression_levels)1);
+
+      //Initjobs(qpl_path_software);
+      //qpl_dec->Getjob();
+      auto ret=qpl_dec->Decompress(
+          compressedSize,
+          (const uint8_t*)pageData,
+          uncompressedSize,
+          (uint8_t *)uncompressedData_->asMutable<char>());
+      if(ret){
+        //qpl_dec->Freejob();
+        delete qpl_dec;
+        return uncompressedData_->as<char>();
+      }
+
+      
     }
     default:
       VELOX_FAIL("Unsupported Parquet compression type '{}'", codec_);
