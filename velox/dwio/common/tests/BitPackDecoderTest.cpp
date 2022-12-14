@@ -114,6 +114,38 @@ class BitPackDecoderTest : public testing::Test {
     checkDecodeResult(randomInts_.data(), rows, width, result.data());
   }
 
+  template <typename T>
+  void testUnpack_1(uint8_t width, RowSet rows) {
+    std::vector<T> result(rows.size());
+    int32_t start = 0;
+
+    int32_t batch = 1;
+    // Read the encoding in progressively larger batches, each time 3x more than
+    // previous.
+    auto bits = bitPackedData_[width].data();
+      auto row = rows[start];
+      int32_t bit = row * width;
+      auto byteOffset = bit / 8;
+      auto bitOffset = bit & 7;
+      auto numBytes = bits::roundUp((rows.back() + 1) * width, 8) / 8;
+
+      auto numRows = std::min<int32_t>(start + batch, rows.size()) - start;
+      auto bitsPointer = reinterpret_cast<const uint64_t*>(
+          reinterpret_cast<const char*>(bits) + byteOffset);
+      auto end = reinterpret_cast<const char*>(bitsPointer) + numBytes;
+
+      unpack(
+          bitsPointer,
+          0,
+          rows,
+          0,
+          width,
+          end,
+          result.data());
+
+    checkDecodeResult(randomInts_.data(), rows, width, result.data());
+  }
+
   uint32_t bytes(uint64_t numValues, uint8_t bitWidth) {
     return (numValues * bitWidth + 7) / 8;
   }
@@ -156,10 +188,24 @@ using std::chrono::system_clock;
 
 TEST_F(BitPackDecoderTest, allWidths) {
   for (auto width = 0; width < bitPackedData_.size() - 1; ++width) {
-    testUnpack<int32_t>(width, allRows_);
-    testUnpack<int64_t>(width, allRows_);
-    testUnpack<int32_t>(width, oddRows_);
-    testUnpack<int64_t>(width, oddRows_);
+    auto startTime = system_clock::now();
+    testUnpack_1<int32_t>(width, allRows_);
+    auto curTime = system_clock::now();
+    size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+                             curTime - startTime)
+                             .count();
+    std::cout << "BitPackDecoderTest, allWidths int32_t width: " << width << ", allRows: " << allRows_.size() << ", time: " << msElapsed << "us" << std::endl;
+    // std::cout << "BitPackDecoderTest, allWidths int64_t width: " << width << ", allRows: " << allRows_.size() << std::endl;
+    // testUnpack<int64_t>(width, allRows_);
+    // startTime = system_clock::now();
+    // testUnpack_1<int32_t>(width, oddRows_);
+    // curTime = system_clock::now();
+    // msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+    //                          curTime - startTime)
+    //                          .count();
+    // std::cout << "BitPackDecoderTest, allWidths int32_t width: " << width << ", oddRows_: " << oddRows_.size() << ", time: " << msElapsed << "us" << std::endl;
+    // std::cout << "BitPackDecoderTest, allWidths int64_t width: " << width << ", oddRows_: " << oddRows_.size() << std::endl;
+    // testUnpack<int64_t>(width, oddRows_);
   }
 }
 
@@ -175,18 +221,18 @@ TEST_F(BitPackDecoderTest, uint8AllRows) {
   }
 }
 
-TEST_F(BitPackDecoderTest, uint16AllRows) {
-  for (auto width = 1; width <= 16; ++width) {
-    auto startTime = system_clock::now();
-    // sleep(20);
-    testUnpack<uint16_t>(width);
-    auto curTime = system_clock::now();
-    size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
-                             curTime - startTime)
-                             .count();
-    std::cout << "uint16AllRows width: " << width << ", time: " << msElapsed << "us" << std::endl;    
-  }
-}
+// TEST_F(BitPackDecoderTest, uint16AllRows) {
+//   for (auto width = 1; width <= 16; ++width) {
+//     auto startTime = system_clock::now();
+//     // sleep(20);
+//     testUnpack<uint16_t>(width);
+//     auto curTime = system_clock::now();
+//     size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+//                              curTime - startTime)
+//                              .count();
+//     std::cout << "uint16AllRows width: " << width << ", time: " << msElapsed << "us" << std::endl;    
+//   }
+// }
 
 TEST_F(BitPackDecoderTest, uint32AllRows) {
   for (auto width = 1; width <= 32; ++width) {

@@ -88,7 +88,53 @@ FOLLY_ALWAYS_INLINE __m256i gather8Sparse(
   return as256i(data & masks);
 }
 
-#ifndef VELOX_ENABLE_QPL
+#ifdef VELOX_ENABLE_QPL
+template <uint8_t width, typename T>
+int32_t decode2To24(
+    const uint64_t* bits,
+    int32_t bitOffset,
+    const int* rows,
+    int32_t numRows,
+    T* result) {
+  uint32_t size = 0;
+  // sleep(10);
+  qpl_status status = qpl_get_job_size(qpl_path_hardware, &size);
+  VELOX_DCHECK_EQ(status, QPL_STS_OK);
+
+  qpl_job* job    = (qpl_job *) std::malloc(size);
+  status = qpl_init_job(qpl_path_hardware, job);
+  VELOX_DCHECK(status == QPL_STS_OK, "Initialization of QPL Job failed");
+
+  auto row = rows[0];
+  int32_t readRows = numRows / 8 * 8;
+  // std::cout << "numrows: " << numRows << ", readRows: " << readRows << ", row: " << row << ", bitOffset: " << bitOffset << std::endl;
+
+  job->next_in_ptr = reinterpret_cast<uint8_t*>(const_cast<uint64_t*>(bits + bits::roundUp(bitOffset + row * width, 8) / 8));
+  job->available_in = static_cast<uint32_t>(readRows * width / sizeof(T));
+  job->next_out_ptr = reinterpret_cast<uint8_t*>(result);
+  job->available_out = static_cast<uint32_t>(readRows * sizeof(T));
+  job->op = qpl_op_extract;
+  job->parser        = qpl_p_le_packed_array;
+  job->src1_bit_width = width;
+  job->num_input_elements = static_cast<uint32_t>(readRows);
+  if (sizeof(T) == sizeof(int8_t)) {
+    job->out_bit_width = qpl_ow_8;
+  } else if (sizeof(T) == sizeof(uint16_t)) {
+    job->out_bit_width = qpl_ow_16;
+  } else {
+    job->out_bit_width = qpl_ow_32;
+  }
+  job->param_low          = 0;
+  job->param_high         = readRows;
+
+  status = qpl_execute_job(job);
+  VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
+
+  std::free(job);
+  return readRows;
+}
+#endif
+
 template <uint8_t width, typename T>
 int32_t decode1To24(
     const uint64_t* bits,
@@ -96,7 +142,12 @@ int32_t decode1To24(
     const int* rows,
     int32_t numRows,
     T* result) {
-  // std::cout << "decode1To24 width: " << width << std::endl;
+  // std::cout << "decode1To24 width: " << (int)width << std::endl;
+#ifdef VELOX_ENABLE_QPL  
+  if (width != 1) {
+    return decode2To24<width>(bits, bitOffset, rows, numRows, result);
+  }
+#endif  
   constexpr uint64_t kMask = bits::lowMask(width);
   constexpr uint64_t kMask2 = kMask | (kMask << 8);
   constexpr uint64_t kMask4 = kMask2 | (kMask2 << 16);
@@ -105,6 +156,7 @@ int32_t decode1To24(
   constexpr uint64_t kDepMask16 = kMask16 | (kMask16 << 32);
   int32_t i = 0;
   const auto masks = as8x32(_mm256_set1_epi32(kMask));
+  // std::cout << "numrows: " << numRows << ", row: " << rows[0] << ", bitOffset: " << bitOffset << std::endl;
   for (; i + 8 <= numRows; i += 8) {
     auto row = rows[i];
     auto endRow = rows[i + 7];
@@ -168,49 +220,6 @@ int32_t decode1To24(
   return i;
 }
 
-#else
-template <uint8_t width, typename T>
-int32_t decode1To24(
-    const uint64_t* bits,
-    int32_t bitOffset,
-    const int* rows,
-    int32_t numRows,
-    T* result) {
-  uint32_t size = 0;
-  qpl_status status = qpl_get_job_size(qpl_path_software, &size);
-  VELOX_DCHECK_EQ(status, QPL_STS_OK);
-
-  qpl_job* job    = (qpl_job *) std::malloc(size);
-  status = qpl_init_job(qpl_path_software, job);
-  VELOX_DCHECK(status == QPL_STS_OK, "Initialization of QPL Job failed");
-
-  auto row = rows[0];
-
-  job->next_in_ptr = reinterpret_cast<uint8_t*>(const_cast<uint64_t*>(bits + (bitOffset + width * row)/8));
-  job->available_in = static_cast<uint32_t>(numRows);
-  job->next_out_ptr = reinterpret_cast<uint8_t*>(result);
-  job->available_out = static_cast<uint32_t>(numRows * width / sizeof(T));
-  job->op = qpl_op_extract;
-  job->parser        = qpl_p_le_packed_array;
-  job->src1_bit_width = width;
-  job->num_input_elements = static_cast<uint32_t>(numRows);
-  if (sizeof(T) == sizeof(int8_t)) {
-    job->out_bit_width = qpl_ow_8;
-  } else if (sizeof(T) == sizeof(uint16_t)) {
-    job->out_bit_width = qpl_ow_16;
-  } else {
-    job->out_bit_width = qpl_ow_32;
-  }
-  job->param_low          = 0;
-  job->param_high         = numRows;
-
-  status = qpl_execute_job(job);
-  VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
-
-  std::free(job);
-  return numRows;
-}
-#endif
 
 #define WIDTH_CASE(width)                                                      \
   case width:                                                                  \
@@ -230,8 +239,9 @@ void unpack(
     uint8_t bitWidth,
     const char* bufferEnd,
     T* result) {
-  uint64_t mask = bits::lowMask(bitWidth);
+  uint64_t mask = bits::lowMask(bitWidth);  
 
+  // std::cout << "unpack T width: " << (int)bitWidth << ", bitOffset: " << bitOffset << ", rows: " << rows.size() << std::endl;
 
   if (bitWidth == 0) {
     // A column of dictionary indices can be 0 bits wide if all indices are 0.
