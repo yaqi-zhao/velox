@@ -16,10 +16,15 @@
 
 #pragma once
 
+#include <iostream>
+
 #include "velox/common/base/BitUtil.h"
 #include "velox/common/base/Exceptions.h"
 #include "velox/vector/TypeAliases.h"
-
+#include <xsimd/xsimd.hpp>
+#  if defined(__AVX2__)
+#    include <immintrin.h>
+#endif
 #include <folly/Range.h>
 #ifdef VELOX_ENABLE_QPL
 #include <qpl/qpl.h>
@@ -612,8 +617,10 @@ inline void unpack<uint8_t>(
   VELOX_CHECK(bitWidth >= 1 && bitWidth <= 8);
   VELOX_CHECK((numValues & 0x7) == 0);
   VELOX_CHECK(inputBufferLen * 8 >= bitWidth * numValues);
+  // std::cout << "unpack uint8_t" << std::endl;
 
 #if XSIMD_WITH_AVX2
+  // std::cout << "XSIMD_WITH_AVX2 defined" << std::endl;
 
   uint64_t mask = kPdepMask8[bitWidth];
   uint64_t numBytes = (numValues * bitWidth + 7) / 8;
@@ -641,6 +648,7 @@ inline void unpack<uint8_t>(
 
 #else
 
+  // std::cout << "XSIMD_WITH_AVX2 not defined" << std::endl;
   unpackNaive<uint8_t>(inputBits, inputBufferLen, numValues, bitWidth, result);
 
 #endif
@@ -653,25 +661,62 @@ inline void unpack<uint8_t>(const uint8_t* FOLLY_NONNULL& inputBits,
     uint64_t numValues,
     uint8_t bitWidth,
     uint8_t* FOLLY_NONNULL& result) {
+  // sleep(20);
+  VELOX_CHECK(bitWidth >= 1 && bitWidth <= 8);
+  VELOX_CHECK((numValues & 0x7) == 0);
+  VELOX_CHECK(inputBufferLen * 8 >= bitWidth * numValues);  
   uint32_t size = 0;
+  if (bitWidth == 1) {
+#if XSIMD_WITH_AVX2
+    uint64_t mask = kPdepMask8[bitWidth];
+    uint64_t numBytes = (numValues * bitWidth + 7) / 8;
+    auto readEndOffset = inputBits + numBytes;
+
+    // Process bitWidth bytes (8 values) a time. Note that for bitWidth 8, the
+    // performance of direct memcpy is about the same as this solution.
+    while (inputBits <= readEndOffset - 8) {
+      // Using memcpy() here may result in non-optimized loops by clong.
+      uint64_t val = *reinterpret_cast<const uint64_t*>(inputBits);
+      *(reinterpret_cast<uint64_t*>(result)) = _pdep_u64(val, mask);
+      inputBits += bitWidth;
+      result += 8;
+    }
+
+    // last batch of 8 values that is less than 8 bytes
+    uint64_t val = 0;
+    while (inputBits < readEndOffset) {
+      std::memcpy(&val, inputBits, bitWidth);
+
+      *(reinterpret_cast<uint64_t*>(result)) = _pdep_u64(val, mask);
+      inputBits += bitWidth;
+      result += 8;
+    }
+
+#else    
+    unpackNaive<uint8_t>(inputBits, inputBufferLen, numValues, bitWidth, result);
+#endif    
+    return;
+  }  
   // Job initialization
-  qpl_status status = qpl_get_job_size(qpl_path_hardware, &size);
+  // std::cout << "unpack uint8_t, bitWidth: " <<  bitWidth << std::endl;
+  qpl_status status = qpl_get_job_size(qpl_path_software, &size);
   VELOX_DCHECK_EQ(status, QPL_STS_OK);
 
-  std::unique_ptr<uint8_t[]> job_buffer = std::make_unique<uint8_t[]>(size);
-  auto job = reinterpret_cast<qpl_job *>(job_buffer.get());
-  status = qpl_init_job(qpl_path_hardware, job);
+  qpl_job* job    = (qpl_job *) std::malloc(size);
+  status = qpl_init_job(qpl_path_software, job);
   VELOX_DCHECK(status == QPL_STS_OK, "Initialization of QPL Job failed");
 
   job->next_in_ptr = const_cast<uint8_t*>(inputBits);
   job->available_in = static_cast<uint32_t>(inputBufferLen);
-  job->next_out_ptr = result;;
-  job->available_out = static_cast<uint32_t>(numValues);
-  job->op = qpl_op_expand;
+  job->next_out_ptr = result;
+  job->available_out = static_cast<uint32_t>(numValues * sizeof(uint8_t));
+  job->op = qpl_op_extract;
+  job->parser        = qpl_p_le_packed_array;
   job->src1_bit_width = bitWidth;
-  job->src2_bit_width = 8;
-  job->num_input_elements = numValues;
+  job->num_input_elements = static_cast<uint32_t>(numValues);
   job->out_bit_width = qpl_ow_8;
+  job->param_low          = 0;
+  job->param_high         = numValues;
 
   status = qpl_execute_job(job);
   VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
@@ -681,7 +726,7 @@ inline void unpack<uint8_t>(const uint8_t* FOLLY_NONNULL& inputBits,
 }
 #endif
 
-
+#ifndef VELOX_ENABLE_QPL
 template <>
 inline void unpack<uint16_t>(
     const uint8_t* FOLLY_NONNULL& inputBits,
@@ -689,6 +734,8 @@ inline void unpack<uint16_t>(
     uint64_t numValues,
     uint8_t bitWidth,
     uint16_t* FOLLY_NONNULL& result) {
+  // std::cout << "unpack uint16_t bitWidth: " << bitWidth << std::endl;
+  // sleep(20);
   VELOX_CHECK(bitWidth >= 1 && bitWidth <= 16);
   VELOX_CHECK((numValues & 0x7) == 0);
   VELOX_CHECK(inputBufferLen * 8 >= bitWidth * numValues);
@@ -732,6 +779,57 @@ inline void unpack<uint16_t>(
 #endif
 }
 
+#else
+template <>
+inline void unpack<uint16_t>(
+    const uint8_t* FOLLY_NONNULL& inputBits,
+    uint64_t inputBufferLen,
+    uint64_t numValues,
+    uint8_t bitWidth,
+    uint16_t* FOLLY_NONNULL& result) {      
+  // sleep(10);
+  uint32_t size = 0;
+  if (bitWidth == 1) {
+#if XSIMD_WITH_AVX2
+    unpack1to4(bitWidth, inputBits, numValues, result);
+#else
+
+    unpackNaive<uint16_t>(inputBits, inputBufferLen, numValues, bitWidth, result);
+
+#endif
+    return;
+  }  
+  // Job initialization
+  qpl_status status = qpl_get_job_size(qpl_path_software, &size);
+  VELOX_DCHECK_EQ(status, QPL_STS_OK);
+  // std::cout << "unpack uint16_t bitWidth: " << bitWidth << std::endl;
+
+  qpl_job* job    = (qpl_job *) std::malloc(size);
+  status = qpl_init_job(qpl_path_software, job);
+  VELOX_DCHECK(status == QPL_STS_OK, "Initialization of QPL Job failed");
+
+  job->next_in_ptr = const_cast<uint8_t*>(inputBits);
+  job->available_in = static_cast<uint32_t>(inputBufferLen);
+  job->next_out_ptr = reinterpret_cast<uint8_t*>(result);
+  job->available_out = static_cast<uint32_t>(numValues * sizeof(uint16_t));
+  job->op = qpl_op_extract;
+  job->parser        = qpl_p_le_packed_array;
+  job->src1_bit_width = bitWidth;
+  job->num_input_elements = static_cast<uint32_t>(inputBufferLen * 8 / bitWidth);
+  job->out_bit_width = qpl_ow_16;
+  job->param_low          = 0;
+  job->param_high         = numValues;
+
+  status = qpl_execute_job(job);
+  VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
+
+  std::free(job);
+  return;
+}
+#endif
+
+
+#ifndef VELOX_ENABLE_QPL
 template <>
 inline void unpack<uint32_t>(
     const uint8_t* FOLLY_NONNULL& inputBits,
@@ -742,6 +840,7 @@ inline void unpack<uint32_t>(
   VELOX_CHECK(bitWidth >= 1 && bitWidth <= 32);
   VELOX_CHECK((numValues & 0x7) == 0);
   VELOX_CHECK(inputBufferLen * 8 >= bitWidth * numValues);
+  // std::cout << "unpack uint32_t" << std::endl;
 
 #if XSIMD_WITH_AVX2
 
@@ -802,6 +901,56 @@ inline void unpack<uint32_t>(
 
 #endif
 }
+
+#else
+template <>
+inline void unpack<uint32_t>(
+    const uint8_t* FOLLY_NONNULL& inputBits,
+    uint64_t inputBufferLen,
+    uint64_t numValues,
+    uint8_t bitWidth,
+    uint32_t* FOLLY_NONNULL& result) {     
+  // sleep(10);
+  // VELOX_CHECK(bitWidth >= 1 && bitWidth <= 32);
+  // VELOX_CHECK((numValues & 0x7) == 0);
+  // VELOX_CHECK(inputBufferLen * 8 >= bitWidth * numValues);
+  if (bitWidth == 1) {
+#if XSIMD_WITH_AVX2
+  unpack1to7(bitWidth, inputBits, numValues, result);
+#else
+    unpackNaive<uint32_t>(inputBits, inputBufferLen, numValues, bitWidth, result);
+#endif    
+    return;
+  }
+  uint32_t size = 0;
+
+  // Job initialization
+  qpl_status status = qpl_get_job_size(qpl_path_software, &size);
+  VELOX_DCHECK_EQ(status, QPL_STS_OK);
+  // std::cout << "unpack uint32_t bitWidth: " << bitWidth << std::endl;
+
+  qpl_job* job    = (qpl_job *) std::malloc(size);
+  status = qpl_init_job(qpl_path_software, job);
+  VELOX_DCHECK(status == QPL_STS_OK, "Initialization of QPL Job failed");
+
+  job->next_in_ptr = const_cast<uint8_t*>(inputBits);
+  job->available_in = static_cast<uint32_t>(inputBufferLen);
+  job->next_out_ptr = reinterpret_cast<uint8_t*>(result);
+  job->available_out = static_cast<uint32_t>(numValues * sizeof(uint32_t));
+  job->op = qpl_op_extract;
+  job->src1_bit_width = bitWidth;
+  job->num_input_elements = static_cast<uint32_t>(inputBufferLen * 8 / bitWidth);
+  job->out_bit_width = qpl_ow_32;
+  job->param_low          = 0;
+  job->param_high         = numValues;
+
+  status = qpl_execute_job(job);
+  VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
+
+  std::free(job);
+  return;
+}
+#endif
 
 // Loads a bit field from 'ptr' + bitOffset for up to 'bitWidth' bits. makes
 // sure not to access bytes past lastSafeWord + 7. The definition is put here

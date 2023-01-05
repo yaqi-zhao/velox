@@ -20,6 +20,8 @@
 
 #include <folly/Random.h>
 #include <gtest/gtest.h>
+#include <iostream>
+#include <chrono>
 
 using namespace facebook::velox::dwio::common;
 using namespace facebook::velox;
@@ -121,6 +123,7 @@ class BitPackDecoderTest : public testing::Test {
   void testUnpack(uint8_t bitWidth) {
     auto numValues = randomInts_.size();
     std::vector<T> result(numValues);
+    // T* result = reinterpret_cast<T*>(std::malloc(numValues * sizeof(T)));
 
     const uint8_t* inputIter =
         reinterpret_cast<const uint8_t*>(bitPackedData_[bitWidth].data());
@@ -129,6 +132,9 @@ class BitPackDecoderTest : public testing::Test {
         inputIter, bytes(numValues, bitWidth), numValues, bitWidth, outputIter);
 
     checkDecodeResult(randomInts_.data(), allRows_, bitWidth, result.data());
+
+    // std::free(result);
+    // result = NULL;
   }
 
   std::vector<uint64_t> randomInts_;
@@ -146,6 +152,8 @@ class BitPackDecoderTest : public testing::Test {
   RowSet oddRows_;
 };
 
+using std::chrono::system_clock;
+
 TEST_F(BitPackDecoderTest, allWidths) {
   for (auto width = 0; width < bitPackedData_.size() - 1; ++width) {
     testUnpack<int32_t>(width, allRows_);
@@ -157,18 +165,37 @@ TEST_F(BitPackDecoderTest, allWidths) {
 
 TEST_F(BitPackDecoderTest, uint8AllRows) {
   for (auto width = 1; width <= 8; ++width) {
+    auto startTime = system_clock::now();
     testUnpack<uint8_t>(width);
+    auto curTime = system_clock::now();
+    size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+                             curTime - startTime)
+                             .count();
+    std::cout << "uint8AllRows width: " << width << ", time: " << msElapsed << "us" << std::endl;     
   }
 }
 
 TEST_F(BitPackDecoderTest, uint16AllRows) {
   for (auto width = 1; width <= 16; ++width) {
+    auto startTime = system_clock::now();
+    // sleep(20);
     testUnpack<uint16_t>(width);
+    auto curTime = system_clock::now();
+    size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+                             curTime - startTime)
+                             .count();
+    std::cout << "uint16AllRows width: " << width << ", time: " << msElapsed << "us" << std::endl;    
   }
 }
 
 TEST_F(BitPackDecoderTest, uint32AllRows) {
   for (auto width = 1; width <= 32; ++width) {
+    auto startTime = system_clock::now();
     testUnpack<uint32_t>(width);
-  }
+    auto curTime = system_clock::now();
+    size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+                             curTime - startTime)
+                             .count();
+    std::cout << "uint32AllRows width: " << width << ", time: " << msElapsed << "us" << std::endl;
+   }
 }

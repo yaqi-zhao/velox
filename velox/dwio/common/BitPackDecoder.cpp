@@ -20,7 +20,8 @@ namespace facebook::velox::dwio::common {
 
 using int128_t = __int128_t;
 
-#if XSIMD_WITH_AVX2
+// #if XSIMD_WITH_AVX2
+#if __AVX2__
 
 typedef int32_t __m256si __attribute__((__vector_size__(32), __may_alias__));
 
@@ -87,6 +88,7 @@ FOLLY_ALWAYS_INLINE __m256i gather8Sparse(
   return as256i(data & masks);
 }
 
+#ifndef VELOX_ENABLE_QPL
 template <uint8_t width, typename T>
 int32_t decode1To24(
     const uint64_t* bits,
@@ -94,6 +96,7 @@ int32_t decode1To24(
     const int* rows,
     int32_t numRows,
     T* result) {
+  // std::cout << "decode1To24 width: " << width << std::endl;
   constexpr uint64_t kMask = bits::lowMask(width);
   constexpr uint64_t kMask2 = kMask | (kMask << 8);
   constexpr uint64_t kMask4 = kMask2 | (kMask2 << 16);
@@ -165,6 +168,50 @@ int32_t decode1To24(
   return i;
 }
 
+#else
+template <uint8_t width, typename T>
+int32_t decode1To24(
+    const uint64_t* bits,
+    int32_t bitOffset,
+    const int* rows,
+    int32_t numRows,
+    T* result) {
+  uint32_t size = 0;
+  qpl_status status = qpl_get_job_size(qpl_path_software, &size);
+  VELOX_DCHECK_EQ(status, QPL_STS_OK);
+
+  qpl_job* job    = (qpl_job *) std::malloc(size);
+  status = qpl_init_job(qpl_path_software, job);
+  VELOX_DCHECK(status == QPL_STS_OK, "Initialization of QPL Job failed");
+
+  auto row = rows[0];
+
+  job->next_in_ptr = reinterpret_cast<uint8_t*>(const_cast<uint64_t*>(bits + (bitOffset + width * row)/8));
+  job->available_in = static_cast<uint32_t>(numRows);
+  job->next_out_ptr = reinterpret_cast<uint8_t*>(result);
+  job->available_out = static_cast<uint32_t>(numRows * width / sizeof(T));
+  job->op = qpl_op_extract;
+  job->parser        = qpl_p_le_packed_array;
+  job->src1_bit_width = width;
+  job->num_input_elements = static_cast<uint32_t>(numRows);
+  if (sizeof(T) == sizeof(int8_t)) {
+    job->out_bit_width = qpl_ow_8;
+  } else if (sizeof(T) == sizeof(uint16_t)) {
+    job->out_bit_width = qpl_ow_16;
+  } else {
+    job->out_bit_width = qpl_ow_32;
+  }
+  job->param_low          = 0;
+  job->param_high         = numRows;
+
+  status = qpl_execute_job(job);
+  VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
+
+  std::free(job);
+  return numRows;
+}
+#endif
+
 #define WIDTH_CASE(width)                                                      \
   case width:                                                                  \
     i = decode1To24<width>(bits, bitOffset, rows.data(), numSafeRows, result); \
@@ -184,6 +231,7 @@ void unpack(
     const char* bufferEnd,
     T* result) {
   uint64_t mask = bits::lowMask(bitWidth);
+
 
   if (bitWidth == 0) {
     // A column of dictionary indices can be 0 bits wide if all indices are 0.
@@ -232,8 +280,10 @@ void unpack(
     }
   }
   int32_t i = 0;
+  
+  // std::cout << "unpack T 1" << std::endl;
 
-#if XSIMD_WITH_AVX2
+#if __AVX2__
   // Use AVX2 for specific widths.
   switch (bitWidth) {
     WIDTH_CASE(1);
@@ -265,6 +315,18 @@ void unpack(
   }
 #endif
 
+
+// #  if defined(__AVX2__)
+//  std::cout << "unpack T avx2" << std::endl;
+// # else
+//  std::cout << "unpack T no avx2" << std::endl;
+// # endif
+
+// #if XSIMD_WITH_AVX2
+//  std::cout << "unpack T XSIMD_WITH_AVX2" << std::endl;
+// #else
+//  std::cout << "unpack T no XSIMD_WITH_AVX2" << std::endl;
+// #endif
   for (; i < numSafeRows; ++i) {
     auto bit = bitOffset + (rows[i]) * bitWidth;
     auto byte = bit / 8;
