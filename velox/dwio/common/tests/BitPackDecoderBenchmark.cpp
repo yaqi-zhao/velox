@@ -36,7 +36,8 @@ using namespace facebook::velox;
 
 using RowSet = folly::Range<const facebook::velox::vector_size_t*>;
 
-static const uint64_t kNumValues = 1024768 * 8;
+// static const uint64_t kNumValues = 1024768 * 8;
+static const uint64_t kNumValues = 1024768 * 16;
 
 // Array of bit packed representations of randomInts_u32. The array at index i
 // is packed i bits wide and the values come from the low bits of
@@ -147,66 +148,63 @@ void duckdbBitUnpack(uint8_t bitWidth, T* result) {
   BENCHMARK(velox_unpack_fullrows_##width##_8) {                 \
     veloxBitUnpack<uint8_t>(width, result8.data());              \
   }                                                              \
-  BENCHMARK_RELATIVE(legacy_unpack_naive_fullrows_##width##_8) { \
-    legacyUnpackNaive<uint8_t>(allRows, width, result8.data());  \
-  }                                                              \
-  BENCHMARK_RELATIVE(legacy_unpack_fast_fullrows_##width##_8) {  \
-    legacyUnpackFast<uint8_t>(allRows, width, result8.data());   \
-  }                                                              \
-  BENCHMARK_RELATIVE(fastpforlib_unpack_fullrows_##width##_8) {  \
-    fastpforlib<uint8_t>(width, result8.data());                 \
-  }                                                              \
-  BENCHMARK_RELATIVE(arrow_unpack_fullrows_##width##_8) {        \
-    arrowBitUnpack<uint8_t>(width, result8.data());              \
-  }                                                              \
-  BENCHMARK_RELATIVE(duckdb_unpack_fullrows_##width##_8) {       \
-    duckdbBitUnpack<uint8_t>(width, result8.data());             \
-  }                                                              \
+  // BENCHMARK_RELATIVE(legacy_unpack_naive_fullrows_##width##_8) { \
+  //   legacyUnpackNaive<uint8_t>(allRows, width, result8.data());  \
+  // }                                                              \
+  // BENCHMARK_RELATIVE(legacy_unpack_fast_fullrows_##width##_8) {  \
+  //   legacyUnpackFast<uint8_t>(allRows, width, result8.data());   \
+  // }                                                              \
+  // BENCHMARK_RELATIVE(fastpforlib_unpack_fullrows_##width##_8) {  \
+  //   fastpforlib<uint8_t>(width, result8.data());                 \
+  // }                                                              \
+  // BENCHMARK_RELATIVE(arrow_unpack_fullrows_##width##_8) {        \
+  //   arrowBitUnpack<uint8_t>(width, result8.data());              \
+  // }                                                              \
+  // BENCHMARK_RELATIVE(duckdb_unpack_fullrows_##width##_8) {       \
+  //   duckdbBitUnpack<uint8_t>(width, result8.data());             \
+  // }                                                              \
   BENCHMARK_DRAW_LINE();
 
 #define BENCHMARK_UNPACK_FULLROWS_CASE_16(width)                  \
   BENCHMARK(velox_unpack_fullrows_##width##_16) {                 \
     veloxBitUnpack<uint16_t>(width, result16.data());             \
   }                                                               \
-  BENCHMARK_RELATIVE(legacy_unpack_naive_fullrows_##width##_16) { \
-    legacyUnpackNaive<uint16_t>(allRows, width, result16.data()); \
-  }                                                               \
-  BENCHMARK_RELATIVE(legacy_unpack_fast_fullrows_##width##_16) {  \
-    legacyUnpackFast<uint16_t>(allRows, width, result16.data());  \
-  }                                                               \
-  BENCHMARK_RELATIVE(fastpforlib_unpack_fullrows_##width##_16) {  \
-    fastpforlib<uint16_t>(width, result16.data());                \
-  }                                                               \
-  BENCHMARK_RELATIVE(arrow_unpack_fullrows_##width##_16) {        \
-    arrowBitUnpack<uint16_t>(width, result16.data());             \
-  }                                                               \
-  BENCHMARK_RELATIVE(duckdb_unpack_fullrows_##width##_16) {       \
-    duckdbBitUnpack<uint16_t>(width, result16.data());            \
-  }                                                               \
+  // BENCHMARK_RELATIVE(legacy_unpack_naive_fullrows_##width##_16) { \
+  //   legacyUnpackNaive<uint16_t>(allRows, width, result16.data()); \
+  // }                                                               \
+  // BENCHMARK_RELATIVE(legacy_unpack_fast_fullrows_##width##_16) {  \
+  //   legacyUnpackFast<uint16_t>(allRows, width, result16.data());  \
+  // }                                                               \
+  // BENCHMARK_RELATIVE(fastpforlib_unpack_fullrows_##width##_16) {  \
+  //   fastpforlib<uint16_t>(width, result16.data());                \
+  // }                                                               \
+  // BENCHMARK_RELATIVE(arrow_unpack_fullrows_##width##_16) {        \
+  //   arrowBitUnpack<uint16_t>(width, result16.data());             \
+  // }                                                               \
+  // BENCHMARK_RELATIVE(duckdb_unpack_fullrows_##width##_16) {       \
+  //   duckdbBitUnpack<uint16_t>(width, result16.data());            \
+  // }                                                               \
   BENCHMARK_DRAW_LINE();
 
 #define BENCHMARK_UNPACK_FULLROWS_CASE_32(width)                  \
   BENCHMARK(velox_unpack_fullrows_##width##_32) {                 \
     veloxBitUnpack<uint32_t>(width, result32.data());             \
   }                                                               \
-  BENCHMARK_RELATIVE(legacy_unpack_naive_fullrows_##width##_32) { \
-    legacyUnpackNaive<uint32_t>(allRows, width, result32.data()); \
-  }                                                               \
-  BENCHMARK_RELATIVE(legacy_unpack_fast_fullrows_##width##_32) {  \
-    legacyUnpackFast<uint32_t>(allRows, width, result32.data());  \
-  }                                                               \
-  BENCHMARK_RELATIVE(lemirebmi_unpack_fullrows_##width##_32) {    \
-    lemirebmi2(width, result32.data());                           \
-  }                                                               \
-  BENCHMARK_RELATIVE(fastpforlib_unpack_fullrows_##width##_32) {  \
-    fastpforlib<uint32_t>(width, result32.data());                \
-  }                                                               \
-  BENCHMARK_RELATIVE(arrow_unpack_fullrows_##width##_32) {        \
-    arrowBitUnpack<uint32_t>(width, result32.data());             \
-  }                                                               \
-  BENCHMARK_RELATIVE(duckdb_unpack_fullrows_##width##_32) {       \
-    duckdbBitUnpack<uint32_t>(width, result32.data());            \
-  }                                                               \
+  // BENCHMARK_RELATIVE(legacy_unpack_naive_fullrows_##width##_32) { \
+  //   legacyUnpackNaive<uint32_t>(allRows, width, result32.data()); \
+  // }                                                               \
+  // BENCHMARK_RELATIVE(legacy_unpack_fast_fullrows_##width##_32) {  \
+  //   legacyUnpackFast<uint32_t>(allRows, width, result32.data());  \
+  // }                                                               \
+  // BENCHMARK_RELATIVE(lemirebmi_unpack_fullrows_##width##_32) {    \
+  //   lemirebmi2(width, result32.data());                           \
+  // }                                                               \
+  // BENCHMARK_RELATIVE(arrow_unpack_fullrows_##width##_32) {        \
+  //   arrowBitUnpack<uint32_t>(width, result32.data());             \
+  // }                                                               \
+  // BENCHMARK_RELATIVE(duckdb_unpack_fullrows_##width##_32) {       \
+  //   duckdbBitUnpack<uint32_t>(width, result32.data());            \
+  // }                                                               \
   BENCHMARK_DRAW_LINE();
 
 #define BENCHMARK_UNPACK_ODDROWS_CASE_8(width)                  \
@@ -289,11 +287,11 @@ BENCHMARK_UNPACK_FULLROWS_CASE_32(32)
 
 BENCHMARK_DRAW_LINE();
 
-BENCHMARK_UNPACK_ODDROWS_CASE_8(1)
-BENCHMARK_UNPACK_ODDROWS_CASE_8(2)
-BENCHMARK_UNPACK_ODDROWS_CASE_8(4)
-BENCHMARK_UNPACK_ODDROWS_CASE_8(8)
-
+// BENCHMARK_UNPACK_ODDROWS_CASE_8(1)
+// BENCHMARK_UNPACK_ODDROWS_CASE_8(2)
+// BENCHMARK_UNPACK_ODDROWS_CASE_8(4)
+// BENCHMARK_UNPACK_ODDROWS_CASE_8(8)
+/*
 BENCHMARK_DRAW_LINE();
 
 BENCHMARK_UNPACK_ODDROWS_CASE_16(1)
@@ -317,7 +315,7 @@ BENCHMARK_UNPACK_ODDROWS_CASE_32(16)
 BENCHMARK_UNPACK_ODDROWS_CASE_32(22)
 BENCHMARK_UNPACK_ODDROWS_CASE_32(24)
 BENCHMARK_UNPACK_ODDROWS_CASE_32(31)
-
+*/
 void populateBitPacked() {
   bitPackedData.resize(33);
   for (auto bitWidth = 1; bitWidth <= 32; ++bitWidth) {
@@ -415,6 +413,7 @@ int32_t main(int32_t argc, char* argv[]) {
   folly::init(&argc, &argv);
 
   // Populate uint32 buffer
+  std::cout << "kNumValues: " << kNumValues << std::endl;
 
   for (int32_t i = 0; i < kNumValues; i++) {
     auto randomInt = folly::Random::rand32();
