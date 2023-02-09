@@ -309,6 +309,7 @@ static inline void unpack8_cast(
   // bytes (8 values) a time.
   uint64_t val = 0;
   while (inputBuffer < readEndOffset) {
+    // std::cout << "inputBuffer < readEndOffset: " << (int)(readEndOffset - inputBuffer) << std::endl;
     std::memcpy(&val, inputBuffer, 8);
 
     __m256i result =
@@ -318,6 +319,7 @@ static inline void unpack8_cast(
     inputBuffer += 8;
     outputBuffer += 8;
   }
+  // std::cout << "======= numValues : " << numValues << std::endl;
 }
 
 // Unpack numValues number of uint16_t values with bitWidth in {9, 11, 13,
@@ -701,11 +703,11 @@ inline void unpack<uint8_t>(const uint8_t* FOLLY_NONNULL& inputBits,
   }  
   // Job initialization
   // std::cout << "unpack uint8_t, bitWidth: " <<  bitWidth << "inputBufferLen: " << inputBufferLen << ", numValues: " << numValues << std::endl;
-  qpl_status status = qpl_get_job_size(qpl_path_software, &size);
+  qpl_status status = qpl_get_job_size(qpl_path_hardware, &size);
   VELOX_DCHECK_EQ(status, QPL_STS_OK);
 
   qpl_job* job    = (qpl_job *) std::malloc(size);
-  status = qpl_init_job(qpl_path_software, job);
+  status = qpl_init_job(qpl_path_hardware, job);
   VELOX_DCHECK(status == QPL_STS_OK, "Initialization of QPL Job failed");
 
   job->next_in_ptr = const_cast<uint8_t*>(inputBits);
@@ -803,12 +805,12 @@ inline void unpack<uint16_t>(
     return;
   }  
   // Job initialization
-  qpl_status status = qpl_get_job_size(qpl_path_software, &size);
+  qpl_status status = qpl_get_job_size(qpl_path_hardware, &size);
   VELOX_DCHECK_EQ(status, QPL_STS_OK);
   // std::cout << "unpack uint16_t bitWidth: " << bitWidth << std::endl;
 
   qpl_job* job    = (qpl_job *) std::malloc(size);
-  status = qpl_init_job(qpl_path_software, job);
+  status = qpl_init_job(qpl_path_hardware, job);
   VELOX_DCHECK(status == QPL_STS_OK, "Initialization of QPL Job failed");
 
   job->next_in_ptr = const_cast<uint8_t*>(inputBits);
@@ -930,12 +932,12 @@ inline void unpack<uint32_t>(
   uint32_t size = 0;
 
   // Job initialization
-  qpl_status status = qpl_get_job_size(qpl_path_software, &size);
+  qpl_status status = qpl_get_job_size(qpl_path_hardware, &size);
   VELOX_DCHECK_EQ(status, QPL_STS_OK);
   // std::cout << "unpack uint32_t bitWidth: " << bitWidth << std::endl;
 
   qpl_job* job    = (qpl_job *) std::malloc(size);
-  status = qpl_init_job(qpl_path_software, job);
+  status = qpl_init_job(qpl_path_hardware, job);
   VELOX_DCHECK(status == QPL_STS_OK, "Initialization of QPL Job failed");
 
   job->next_in_ptr = const_cast<uint8_t*>(inputBits);

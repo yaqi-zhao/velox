@@ -143,11 +143,11 @@ int32_t decode1To24(
     int32_t numRows,
     T* result) {
   // std::cout << "decode1To24 width: " << (int)width << std::endl;
-#ifdef VELOX_ENABLE_QPL  
-  if (width != 1) {
-    return decode2To24<width>(bits, bitOffset, rows, numRows, result);
-  }
-#endif  
+// #ifdef VELOX_ENABLE_QPL  
+//   if (width != 1) {
+//     return decode2To24<width>(bits, bitOffset, rows, numRows, result);
+//   }
+// #endif  
   constexpr uint64_t kMask = bits::lowMask(width);
   constexpr uint64_t kMask2 = kMask | (kMask << 8);
   constexpr uint64_t kMask4 = kMask2 | (kMask2 << 16);

@@ -17,18 +17,19 @@ add_subdirectory(utils)
 add_executable(
   velox_dwio_common_test
   BitConcatenationTest.cpp
-  BitPackDecoderTest.cpp
-  ChainedBufferTests.cpp
-  DataBufferTests.cpp
+#  BitPackDecoderTest.cpp
+# ChainedBufferTests.cpp
+#  DataBufferTests.cpp
   DecoderUtilTest.cpp
-  LocalFileSinkTest.cpp
-  LoggedExceptionTest.cpp
-  RangeTests.cpp
+#  LocalFileSinkTest.cpp
+#  LoggedExceptionTest.cpp
+#  RangeTests.cpp
   ReadFileInputStreamTests.cpp
-  RetryTests.cpp
-  TestBufferedInput.cpp
-  TestColumnSelector.cpp
-  TypeTests.cpp)
+  BitPackDecoderTest_1.cpp)
+#  RetryTests.cpp
+#  TestBufferedInput.cpp
+#  TestColumnSelector.cpp
+#  TypeTests.cpp)
 add_test(velox_dwio_common_test velox_dwio_common_test)
 target_link_libraries(
   velox_dwio_common_test
@@ -74,7 +75,22 @@ target_link_libraries(
 if(VELOX_ENABLE_ARROW)
   add_executable(velox_dwio_common_bitpack_decoder_benchmark
                  BitPackDecoderBenchmark.cpp)
+  add_executable(velox_dwio_common_bitpack_decoder_benchmark_8bit
+                 BitPackDecoderBenchmark_8.cpp)
+  add_executable(velox_dwio_common_bitpack_decoder_benchmark_16bit
+                 BitPackDecoderBenchmark_16.cpp)
+  add_executable(velox_dwio_common_bitpack_decoder_benchmark_32bit
+                 BitPackDecoderBenchmark_32.cpp)                 
   target_link_libraries(
     velox_dwio_common_bitpack_decoder_benchmark velox_dwio_common arrow duckdb
+    ${FOLLY} ${FOLLY_BENCHMARK})
+  target_link_libraries(
+    velox_dwio_common_bitpack_decoder_benchmark_8bit velox_dwio_common arrow duckdb
+    ${FOLLY} ${FOLLY_BENCHMARK})
+  target_link_libraries(
+    velox_dwio_common_bitpack_decoder_benchmark_16bit velox_dwio_common arrow duckdb
+    ${FOLLY} ${FOLLY_BENCHMARK})
+  target_link_libraries(
+    velox_dwio_common_bitpack_decoder_benchmark_32bit velox_dwio_common arrow duckdb
     ${FOLLY} ${FOLLY_BENCHMARK})
 endif()

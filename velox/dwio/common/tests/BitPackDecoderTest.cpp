@@ -29,7 +29,7 @@ using namespace facebook::velox;
 class BitPackDecoderTest : public testing::Test {
  protected:
   void SetUp() {
-    for (int32_t i = 0; i < 100000; i++) {
+    for (int32_t i = 0; i < 4099072; i++) {
       auto randomInt = folly::Random::rand64();
       randomInts_.push_back(randomInt);
     }
@@ -155,6 +155,7 @@ class BitPackDecoderTest : public testing::Test {
   void testUnpack(uint8_t bitWidth) {
     auto numValues = randomInts_.size();
     std::vector<T> result(numValues);
+    // sleep(20);
     // T* result = reinterpret_cast<T*>(std::malloc(numValues * sizeof(T)));
 
     const uint8_t* inputIter =

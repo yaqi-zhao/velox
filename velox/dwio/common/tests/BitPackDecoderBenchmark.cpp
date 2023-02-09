@@ -36,8 +36,8 @@ using namespace facebook::velox;
 
 using RowSet = folly::Range<const facebook::velox::vector_size_t*>;
 
-// static const uint64_t kNumValues = 1024768 * 8;
-static const uint64_t kNumValues = 1024768 * 16;
+static const uint64_t kNumValues = 1024768 * 8;
+// static const uint64_t kNumValues = 1024768 * 16;
 
 // Array of bit packed representations of randomInts_u32. The array at index i
 // is packed i bits wide and the values come from the low bits of
