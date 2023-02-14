@@ -27,10 +27,11 @@
 #endif
 #include <folly/Range.h>
 #ifdef VELOX_ENABLE_QPL
-#define linux 1
-#include <qpl/qpl.h>
+// #include <qpl/qpl.h>
+#include "velox/dwio/common/QplJobPool.h"
 #endif
 
+using std::chrono::system_clock;
 
 namespace facebook::velox::dwio::common {
 
@@ -930,13 +931,20 @@ inline void unpack<uint32_t>(
     return;
   }
   uint32_t size = 0;
+  qpl_status status;
 
-  // Job initialization
-  qpl_status status = qpl_get_job_size(qpl_path_hardware, &size);
-  VELOX_DCHECK_EQ(status, QPL_STS_OK);
+  // Job initialization  
+  // qpl_status status = qpl_get_job_size(qpl_path_hardware, &size);
+  // VELOX_DCHECK_EQ(status, QPL_STS_OK);
   // std::cout << "unpack uint32_t bitWidth: " << bitWidth << std::endl;
 
-  qpl_job* job    = (qpl_job *) std::malloc(size);
+  // qpl_job* job    = (qpl_job *) std::malloc(size);
+  facebook::velox::QplJobHWPool& qpl_job_pool = facebook::velox::QplJobHWPool::GetInstance();
+  uint32_t job_id = 0;
+  qpl_job* job = qpl_job_pool.AcquireJob(job_id);
+  // while (job == nullptr) {
+  //   job = qpl_job_pool.AcquireJob(job_id);
+  // }
   status = qpl_init_job(qpl_path_hardware, job);
   VELOX_DCHECK(status == QPL_STS_OK, "Initialization of QPL Job failed");
 
@@ -951,10 +959,19 @@ inline void unpack<uint32_t>(
   job->param_low          = 0;
   job->param_high         = numValues;
 
+#ifdef VELOX_QPL_ASYNC_MODE
+  status = qpl_submit_job(job);
+  VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
+  // status = qpl_wait_job(job);
+  // VELOX_DCHECK(status == QPL_STS_OK, "Wait of QPL Job failed");
+#else
   status = qpl_execute_job(job);
   VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
+  qpl_fini_job(qpl_job_pool.GetJobById(job_id));
+  qpl_job_pool.ReleaseJob(job_id);
+#endif
 
-  std::free(job);
+  // std::free(job);
   inputBits += inputBufferLen;
   return;
 }

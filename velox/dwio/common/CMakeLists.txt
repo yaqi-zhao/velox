@@ -41,6 +41,7 @@ add_library(
   MemoryInputStream.cpp
   MetadataFilter.cpp
   Options.cpp
+  QplJobPool.cpp
   Range.cpp
   ReaderFactory.cpp
   ScanSpec.cpp

@@ -126,7 +126,6 @@ void veloxBitUnpack_1(uint8_t bitWidth, T* result) {
 }
 
 void bitUnpack(uint8_t bitWidth, int index) {
-  std::vector<uint32_t> result(kNumValues, 0);
   veloxBitUnpack_1<uint32_t>(bitWidth, results[index].data());
 }
 
@@ -168,7 +167,7 @@ void parallelBitUnpack(uint8_t thread_num, uint8_t bitWidth) {
   size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
         curTime - startTime).count();
   printf("unpack_%d_%d                  time:%dus\n", int(bitWidth), int(sizeof(uint32_t) * 8), (int)(msElapsed));
-  // checkDecodeResult(randomInts_u32.data(), allRows, bitWidth, results[100].data());
+  // checkDecodeResult(randomInts_u32.data(), allRows, bitWidth, results[0].data());
   // printf("check success");
   return;
 
@@ -179,15 +178,22 @@ void run_parallel_benchmark() {
   printf("=======================================\n");
   auto startTime = system_clock::now();
   int iter_count = 10;
+  int concurrency = 40;
+  // set vector
+  results.clear();
+  results.resize(concurrency);
+  for (int i = 0; i < concurrency; i++) {
+    results[i].resize(kNumValues);
+  }
+
   for (int iter = 1; iter < iter_count; iter++) {
-    for (int i = 40; i < 44; i=i*2) {
+    for (int i = concurrency; i <= concurrency; i=i*2) {
+      for (int k = 0; k < concurrency; k++) {
+        memset(&results[k][0], 0, results[k].size() * sizeof(results[k][0]));
+      }
+      
       printf("Parallel %d Benchmark      time:us  \n", i);
-      for (int j = 1; j < 33; j++) {
-        results.clear();
-        results.resize(i);
-        for (int k = 0; k < i; k++) {
-          results[k].resize(kNumValues);
-        }
+      for (int j = 2; j < 33; j++) {
         parallelBitUnpack(i, j);
       }
     }

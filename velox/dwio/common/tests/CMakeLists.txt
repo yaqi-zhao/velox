@@ -59,6 +59,11 @@ target_link_libraries(
 
 add_library(velox_e2e_filter_test_base E2EFilterTestBase.cpp)
 
+set(QPL_STATIC_LINK_LIBS ${QPL_STATIC_LINK_LIBS})
+if(VELOX_ENABLE_QPL)
+  list(APPEND QPL_STATIC_LINK_LIBS qpl::qpl)
+endif()
+
 target_link_libraries(
   velox_e2e_filter_test_base
   velox_functions_prestosql
@@ -70,7 +75,8 @@ target_link_libraries(
   ${LZO}
   ${ZSTD}
   ${ZLIB_LIBRARIES}
-  ${TEST_LINK_LIBS})
+  ${TEST_LINK_LIBS}
+  ${QPL_STATIC_LINK_LIBS})
 
 if(VELOX_ENABLE_ARROW)
   add_executable(velox_dwio_common_bitpack_decoder_benchmark
@@ -80,7 +86,11 @@ if(VELOX_ENABLE_ARROW)
   add_executable(velox_dwio_common_bitpack_decoder_benchmark_16bit
                  BitPackDecoderBenchmark_16.cpp)
   add_executable(velox_dwio_common_bitpack_decoder_benchmark_32bit
-                 BitPackDecoderBenchmark_32.cpp)                 
+                 BitPackDecoderBenchmark_32.cpp)
+  add_executable(velox_bitpack_decoder_benchmark_32bit_SO
+                 BitDecoderBen_32_sharedOut.cpp)                    
+  add_executable(velox_bitpack_decoder_benchmark_32bit_for_shell
+                 BitPackDecoderBenchmark_32_for_shell.cpp)                                
   target_link_libraries(
     velox_dwio_common_bitpack_decoder_benchmark velox_dwio_common arrow duckdb
     ${FOLLY} ${FOLLY_BENCHMARK})
@@ -93,4 +103,10 @@ if(VELOX_ENABLE_ARROW)
   target_link_libraries(
     velox_dwio_common_bitpack_decoder_benchmark_32bit velox_dwio_common arrow duckdb
     ${FOLLY} ${FOLLY_BENCHMARK})
+  target_link_libraries(
+    velox_bitpack_decoder_benchmark_32bit_SO velox_dwio_common arrow duckdb
+    ${FOLLY} ${FOLLY_BENCHMARK})    
+  target_link_libraries(
+    velox_bitpack_decoder_benchmark_32bit_for_shell velox_dwio_common arrow duckdb
+    ${FOLLY} ${FOLLY_BENCHMARK})    
 endif()

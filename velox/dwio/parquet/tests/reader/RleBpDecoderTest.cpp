@@ -15,9 +15,11 @@
  */
 
 #include "velox/dwio/common/BitPackDecoder.h"
+#include "velox/dwio/common/QplJobPool.h"
 
 #include <arrow/util/rle_encoding.h> // @manual
 #include <gtest/gtest.h>
+
 
 #include <random>
 

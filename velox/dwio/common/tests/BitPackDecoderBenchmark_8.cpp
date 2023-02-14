@@ -94,24 +94,26 @@ void run_simple_benchmark() {
   printf("======================================\n");
 }
 
-void bitUnpack(uint8_t bitWidth, uint8_t* result) {
+template <typename T>
+void veloxBitUnpack_1(uint8_t bitWidth, T* result) {
   const uint8_t* inputIter =
       reinterpret_cast<const uint8_t*>(bitPackedData[bitWidth].data());
-  
-  facebook::velox::dwio::common::unpack<uint8_t>(
+
+  facebook::velox::dwio::common::unpack<T>(
       inputIter, BYTES(kNumValues, bitWidth), kNumValues, bitWidth, result);
-  // printf("bitUnpack bitWidth %d done\n", (int)bitWidth);
+  return;
+}
+
+void bitUnpack(uint8_t bitWidth) {
+  std::vector<uint8_t> result(kNumValues);
+  veloxBitUnpack_1<uint8_t>(bitWidth, result.data());
 }
 
 void parallelBitUnpack(uint8_t thread_num, uint8_t bitWidth) {
   auto startTime = system_clock::now();
   std::vector<std::thread> thread_pool(thread_num);
-   std::vector<uint8_t> result(kNumValues);
-  //  sleep(20);
-  // bitUnpack(bitWidth, result.data());
   for (int i = 0; i < thread_num; i++) {
-    std::vector<uint8_t> result(kNumValues);
-    thread_pool[i] = std::thread(bitUnpack, bitWidth, result.data());
+    thread_pool[i] = std::thread(bitUnpack, bitWidth);
   }
   for (auto& t: thread_pool) {
       t.join();
@@ -180,7 +182,7 @@ void populateBitPacked() {
 
 
   // Populate uint32 buffer
-  for (int total_num = 8; total_num < 32; total_num = total_num* 2) {
+  for (int total_num = 8; total_num < 64; total_num = total_num* 2) {
     kNumValues = 1024768 * total_num;
     std::cout << "kNumValues: " << kNumValues << std::endl;
     for (int32_t i = 0; i < kNumValues; i++) {
