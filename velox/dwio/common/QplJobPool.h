@@ -27,8 +27,11 @@
 #ifdef VELOX_ENABLE_QPL
 #include "qpl/qpl.h"
 
-namespace facebook {
-namespace velox {
+// namespace facebook {
+// namespace velox {
+// namespace qpl {  
+
+namespace facebook::velox::dwio::common {
 
 /// QplJobHWPool is resource pool to provide the job objects, which is
 /// used for storing context information during.
@@ -81,6 +84,8 @@ class QplJobHWPool {
   std::mutex job_lock;
 };
 
-}  //  namespace velox
-}  //  namespace facebook
+}
+// }  //  namespace qpl
+// }  //  namespace velox
+// }  //  namespace facebook
 #endif

@@ -153,6 +153,7 @@ class RleBpDataDecoder : public facebook::velox::parquet::RleBpDecoder {
     }
   }
 
+
   template <bool hasFilter, bool hasHook, bool scatter, typename Visitor>
   void processRun(
       const int32_t* FOLLY_NONNULL rows,
@@ -163,13 +164,36 @@ class RleBpDataDecoder : public facebook::velox::parquet::RleBpDecoder {
       int32_t* FOLLY_NULLABLE filterHits,
       typename Visitor::DataType* FOLLY_NONNULL values,
       int32_t& numValues,
+      std::vector<uint32_t>& qpl_job_ids,
       Visitor& visitor) {
     auto numBits = bitOffset_ +
         (rows[rowIndex + numRows - 1] + 1 - currentRow) * bitWidth_;
 
-    using TValues = typename std::remove_reference<decltype(values[0])>::type;
+    uint32_t values_0 = 0;
+    using TValues = typename std::remove_reference<decltype(values_0)>::type;
+    // using TValues = typename std::remove_reference<decltype(values[0])>::type;
     using TIndex = typename std::make_signed_t<
         typename dwio::common::make_index<TValues>::type>;
+#ifdef VELOX_ENABLE_QPL        
+    if (sizeof(TIndex) == 4) {
+      // std::cout << "TINndex is 4" << std::endl;
+      facebook::velox::dwio::common::unpack_uint<uint32_t>(reinterpret_cast<const uint8_t*&>(super::bufferStart_),
+        super::bufferEnd_ - super::bufferStart_,
+        numRows,
+        bitWidth_,
+        reinterpret_cast<uint32_t*>(values) + numValues, 
+        qpl_job_ids);
+    } else {
+      facebook::velox::dwio::common::unpack(
+          reinterpret_cast<const uint64_t*>(super::bufferStart_),
+          bitOffset_,
+          folly::Range<const int32_t*>(rows + rowIndex, numRows),
+          currentRow,
+          bitWidth_,
+          super::bufferEnd_,
+          reinterpret_cast<TIndex*>(values) + numValues);
+    }
+#else
     facebook::velox::dwio::common::unpack(
         reinterpret_cast<const uint64_t*>(super::bufferStart_),
         bitOffset_,
@@ -178,6 +202,8 @@ class RleBpDataDecoder : public facebook::velox::parquet::RleBpDecoder {
         bitWidth_,
         super::bufferEnd_,
         reinterpret_cast<TIndex*>(values) + numValues);
+#endif
+
     super::bufferStart_ += numBits >> 3;
     bitOffset_ = numBits & 7;
     visitor.template processRun<hasFilter, hasHook, scatter>(
@@ -217,6 +243,65 @@ class RleBpDataDecoder : public facebook::velox::parquet::RleBpDecoder {
     return std::make_pair(bound - range.begin(), bound[-1] - currentRow + 1);
   }
 
+
+#ifdef VELOX_ENABLE_QPL   
+template <bool hasFilter, bool hasHook, bool scatter, typename Visitor>
+  void bulkScan_1(
+      folly::Range<const int32_t*> nonNullRows,
+      const int32_t* FOLLY_NULLABLE scatterRows,
+      Visitor& visitor) {
+    auto numAllRows = visitor.numRows();
+    visitor.setRows(nonNullRows);
+    auto rows = visitor.rows();
+    auto numRows = visitor.numRows();
+    // std::cout << "numAllRows" << numAllRows << ", numRows: " << numRows << std::endl;
+    auto values = visitor.rawValues(numRows);
+    int32_t numValues = 0;
+    auto filterHits = hasFilter ? visitor.outputRows(numRows) : nullptr;
+
+    using TValues = typename std::remove_reference<decltype(values[0])>::type;
+    using TIndex = typename std::make_signed_t<typename dwio::common::make_index<TValues>::type>;
+    if (sizeof(TIndex) == sizeof(uint32_t)) {
+      dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
+      uint32_t job_id = 0;
+      qpl_job* job = qpl_job_pool.AcquireJob(job_id);
+      job->op = qpl_op_extract;
+      job->param_low = 0;
+      job->param_high = numAllRows;
+      // job->op = qpl_op_scan_range;
+      // job->param_low = 0;
+      // job->param_high = 20;
+      job->out_bit_width = qpl_ow_32;
+      job->src1_bit_width = bitWidth_;
+      job->parser = qpl_p_parquet_rle;
+      job->next_in_ptr = reinterpret_cast<uint8_t*>(const_cast<char*>(super::bufferStart_ - 1));
+      job->available_in = super::bufferEnd_ - super::bufferStart_ + 1;
+      job->next_out_ptr = reinterpret_cast<uint8_t*>(values);
+      job->available_out = static_cast<uint32_t>(numRows * sizeof(TIndex)); 
+      job->num_input_elements = numAllRows;
+
+      auto status = qpl_execute_job(job);
+      VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
+      qpl_fini_job(qpl_job_pool.GetJobById(job_id));
+      qpl_job_pool.ReleaseJob(job_id);
+    }
+
+    visitor.template processRun<hasFilter, hasHook, scatter>(
+        values,
+        numRows,
+        scatterRows,
+        filterHits,
+        values,
+        numValues);
+    if (visitor.atEnd()) {
+      visitor.setNumValues(hasFilter ? numValues : numAllRows);
+      return;
+    }        
+    return;   
+  }
+#endif
+
+
   template <bool hasFilter, bool hasHook, bool scatter, typename Visitor>
   void bulkScan(
       folly::Range<const int32_t*> nonNullRows,
@@ -226,11 +311,25 @@ class RleBpDataDecoder : public facebook::velox::parquet::RleBpDecoder {
     visitor.setRows(nonNullRows);
     auto rows = visitor.rows();
     auto numRows = visitor.numRows();
+    // std::cout << "numAllRows" << numAllRows << ", numRows: " << numRows << std::endl;
     auto rowIndex = 0;
     int32_t currentRow = 0;
     auto values = visitor.rawValues(numRows);
     auto filterHits = hasFilter ? visitor.outputRows(numRows) : nullptr;
     int32_t numValues = 0;
+#ifdef VELOX_ENABLE_QPL
+    using TValues = typename std::remove_reference<decltype(values[0])>::type;
+    using TIndex = typename std::make_signed_t<typename dwio::common::make_index<TValues>::type>;
+    if (sizeof(TIndex) == sizeof(uint32_t) && bitWidth_ > 1) {
+      using TFilter = typename std::remove_reference<decltype(visitor.filter())>::type;
+      if (std::is_same_v<TFilter, velox::common::BigintRange>) {
+        return bulkScan_1<hasFilter, hasHook, scatter>(
+              nonNullRows, scatterRows, visitor);
+      }
+    }
+#endif    
+
+    std::vector<uint32_t> qpl_job_ids;
     for (;;) {
       if (remainingValues_) {
         auto [numInRun, numAdvanced] =
@@ -258,6 +357,7 @@ class RleBpDataDecoder : public facebook::velox::parquet::RleBpDecoder {
               filterHits,
               values,
               numValues,
+              qpl_job_ids,
               visitor);
         }
         remainingValues_ -= numAdvanced;
@@ -274,6 +374,20 @@ class RleBpDataDecoder : public facebook::velox::parquet::RleBpDecoder {
       }
       readHeader();
     }
+#ifdef  VELOX_QPL_ASYNC_MODE
+    dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
+    for (int i = 0; i < qpl_job_ids.size(); i++) {
+      if (qpl_job_pool.job_status(qpl_job_ids[i])) {
+        auto status = qpl_wait_job(qpl_job_pool.GetJobById(qpl_job_ids[i]));
+        if (status != QPL_STS_OK) {
+          std::cout << "qpl execution error: " << status << std::endl;
+        }
+        
+        qpl_fini_job(qpl_job_pool.GetJobById(qpl_job_ids[i]));
+        qpl_job_pool.ReleaseJob(qpl_job_ids[i]);
+      }
+    }
+#endif    
   }
 
   // Loads a bit field from 'ptr' + bitOffset for up to 'bitWidth' bits. makes

@@ -20,9 +20,10 @@
 
 #ifdef VELOX_ENABLE_QPL
 
-namespace facebook {
-namespace velox {
-
+// namespace facebook {
+// namespace velox {
+// namespace qpl {
+namespace facebook::velox::dwio::common {
 
 std::array<qpl_job*, QplJobHWPool::MAX_JOB_NUMBER> QplJobHWPool::hw_job_ptr_pool;
 std::vector<bool> QplJobHWPool::job_ptr_locks;
@@ -133,6 +134,8 @@ bool QplJobHWPool::tryLockJob(uint32_t index) {
 //   job_ptr_locks[index] = false;
 // }
 
-}  // namespace velox
-}  // namespace facebook
+}
+// }  // namespace qpl
+// }  // namespace velox
+// }  // namespace facebook
 #endif

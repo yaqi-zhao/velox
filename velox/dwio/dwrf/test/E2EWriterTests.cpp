@@ -95,6 +95,8 @@ TEST(E2EWriterTests, DISABLED_TestFileCreation) {
       batches,
       config,
       E2EWriterTestUtil::simpleFlushPolicyFactory(true));
+
+  E2EWriterTestUtil::testWriter(*pool, type, batches, 1, 1, config);      
 }
 
 VectorPtr createRowVector(
@@ -117,6 +119,7 @@ TEST(E2EWriterTests, E2E) {
   // strides. Continue with smaller size for faster test.
   size_t size = 1100;
   auto pool = memory::getDefaultMemoryPool();
+  auto sink = std::make_unique<LocalFileSink>("/tmp/e2e_generated_file.orc");
 
   HiveTypeParser parser;
   auto type = parser.parse(

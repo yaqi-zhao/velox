@@ -64,8 +64,9 @@ class RleBpDecoderTest {
   void testDecode() {
     const uint8_t* inputIter = encodedValues_.data();
     T* output = outputValues_.data();
+    std::vector<uint32_t> qpl_job_ids;
     facebook::velox::dwio::common::unpack<T>(
-        inputIter, bytes(bitWidth_), numValues_, bitWidth_, output);
+        inputIter, bytes(bitWidth_), numValues_, bitWidth_, output, qpl_job_ids);
 
     inputIter = encodedValues_.data();
     T* expectedOutput = inputValues_.data();

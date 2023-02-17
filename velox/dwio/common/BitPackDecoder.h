@@ -132,7 +132,8 @@ inline void unpack(
     uint64_t inputBufferLen,
     uint64_t numValues,
     uint8_t bitWidth,
-    T* FOLLY_NONNULL& result) {
+    T* FOLLY_NONNULL& result,
+    std::vector<uint32_t>& qpl_job_ids) {
   unpackNaive<T>(inputBits, inputBufferLen, numValues, bitWidth, result);
 }
 
@@ -142,7 +143,8 @@ inline void unpack<uint8_t>(
     uint64_t inputBufferLen,
     uint64_t numValues,
     uint8_t bitWidth,
-    uint8_t* FOLLY_NONNULL& result);
+    uint8_t* FOLLY_NONNULL& result,
+    std::vector<uint32_t>& qpl_job_ids);
 
 template <>
 inline void unpack<uint16_t>(
@@ -150,7 +152,8 @@ inline void unpack<uint16_t>(
     uint64_t inputBufferLen,
     uint64_t numValues,
     uint8_t bitWidth,
-    uint16_t* FOLLY_NONNULL& result);
+    uint16_t* FOLLY_NONNULL& result,
+    std::vector<uint32_t>& qpl_job_ids);
 
 template <>
 inline void unpack<uint32_t>(
@@ -158,7 +161,8 @@ inline void unpack<uint32_t>(
     uint64_t inputBufferLen,
     uint64_t numValues,
     uint8_t bitWidth,
-    uint32_t* FOLLY_NONNULL& result);
+    uint32_t* FOLLY_NONNULL& result,
+    std::vector<uint32_t>& qpl_job_ids);
 
 // The function definitions are put here to make sure they are inlined. Moving
 // them to the .cpp file may result in 10x regression.
@@ -618,7 +622,8 @@ inline void unpack<uint8_t>(
     uint64_t inputBufferLen,
     uint64_t numValues,
     uint8_t bitWidth,
-    uint8_t* FOLLY_NONNULL& result) {
+    uint8_t* FOLLY_NONNULL& result,
+    std::vector<uint32_t>& qpl_job_ids) {
   VELOX_CHECK(bitWidth >= 1 && bitWidth <= 8);
   VELOX_CHECK((numValues & 0x7) == 0);
   VELOX_CHECK(inputBufferLen * 8 >= bitWidth * numValues);
@@ -665,7 +670,8 @@ inline void unpack<uint8_t>(const uint8_t* FOLLY_NONNULL& inputBits,
     uint64_t inputBufferLen,
     uint64_t numValues,
     uint8_t bitWidth,
-    uint8_t* FOLLY_NONNULL& result) {
+    uint8_t* FOLLY_NONNULL& result,
+    std::vector<uint32_t>& qpl_job_ids) {
   // sleep(20);
   VELOX_CHECK(bitWidth >= 1 && bitWidth <= 8);
   VELOX_CHECK((numValues & 0x7) == 0);
@@ -704,11 +710,14 @@ inline void unpack<uint8_t>(const uint8_t* FOLLY_NONNULL& inputBits,
   }  
   // Job initialization
   // std::cout << "unpack uint8_t, bitWidth: " <<  bitWidth << "inputBufferLen: " << inputBufferLen << ", numValues: " << numValues << std::endl;
-  qpl_status status = qpl_get_job_size(qpl_path_hardware, &size);
-  VELOX_DCHECK_EQ(status, QPL_STS_OK);
+  // qpl_status status = qpl_get_job_size(qpl_path_hardware, &size);
+  // VELOX_DCHECK_EQ(status, QPL_STS_OK);
+  // qpl_job* job    = (qpl_job *) std::malloc(size);
 
-  qpl_job* job    = (qpl_job *) std::malloc(size);
-  status = qpl_init_job(qpl_path_hardware, job);
+  facebook::velox::dwio::common::QplJobHWPool& qpl_job_pool = facebook::velox::dwio::common::QplJobHWPool::GetInstance();
+  uint32_t job_id = 0;
+  qpl_job* job = qpl_job_pool.AcquireJob(job_id);
+  auto status = qpl_init_job(qpl_path_hardware, job);
   VELOX_DCHECK(status == QPL_STS_OK, "Initialization of QPL Job failed");
 
   job->next_in_ptr = const_cast<uint8_t*>(inputBits);
@@ -723,11 +732,23 @@ inline void unpack<uint8_t>(const uint8_t* FOLLY_NONNULL& inputBits,
   job->param_low          = 0;
   job->param_high         = numValues;
 
+#ifdef VELOX_QPL_ASYNC_MODE
+  status = qpl_submit_job(job);
+  VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
+  qpl_job_ids.push_back(job_id);
+#else
   status = qpl_execute_job(job);
   VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
+  qpl_fini_job(qpl_job_pool.GetJobById(job_id));
+  qpl_job_pool.ReleaseJob(job_id);
+#endif
 
-  std::free(job);
+  // status = qpl_execute_job(job);
+  // VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
+
+  // std::free(job);
   inputBits += inputBufferLen;
+  result += numValues;
   return;
 }
 #endif
@@ -739,7 +760,8 @@ inline void unpack<uint16_t>(
     uint64_t inputBufferLen,
     uint64_t numValues,
     uint8_t bitWidth,
-    uint16_t* FOLLY_NONNULL& result) {
+    uint16_t* FOLLY_NONNULL& result,
+    std::vector<uint32_t>& qpl_job_ids) {
   // std::cout << "unpack uint16_t bitWidth: " << bitWidth << std::endl;
   // sleep(20);
   VELOX_CHECK(bitWidth >= 1 && bitWidth <= 16);
@@ -792,7 +814,8 @@ inline void unpack<uint16_t>(
     uint64_t inputBufferLen,
     uint64_t numValues,
     uint8_t bitWidth,
-    uint16_t* FOLLY_NONNULL& result) {      
+    uint16_t* FOLLY_NONNULL& result,
+    std::vector<uint32_t>& qpl_job_ids) {      
   // sleep(10);
   uint32_t size = 0;
   if (bitWidth == 1) {
@@ -806,12 +829,16 @@ inline void unpack<uint16_t>(
     return;
   }  
   // Job initialization
-  qpl_status status = qpl_get_job_size(qpl_path_hardware, &size);
-  VELOX_DCHECK_EQ(status, QPL_STS_OK);
+  facebook::velox::dwio::common::QplJobHWPool& qpl_job_pool = facebook::velox::dwio::common::QplJobHWPool::GetInstance();
+  uint32_t job_id = 0;
+  qpl_job* job = qpl_job_pool.AcquireJob(job_id);
+
+  // qpl_status status = qpl_get_job_size(qpl_path_hardware, &size);
+  // VELOX_DCHECK_EQ(status, QPL_STS_OK);
   // std::cout << "unpack uint16_t bitWidth: " << bitWidth << std::endl;
 
-  qpl_job* job    = (qpl_job *) std::malloc(size);
-  status = qpl_init_job(qpl_path_hardware, job);
+  // qpl_job* job    = (qpl_job *) std::malloc(size);
+  auto status = qpl_init_job(qpl_path_hardware, job);
   VELOX_DCHECK(status == QPL_STS_OK, "Initialization of QPL Job failed");
 
   job->next_in_ptr = const_cast<uint8_t*>(inputBits);
@@ -826,12 +853,24 @@ inline void unpack<uint16_t>(
   job->param_low          = 0;
   job->param_high         = numValues;
 
+#ifdef VELOX_QPL_ASYNC_MODE
+  status = qpl_submit_job(job);
+  VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
+  qpl_job_ids.push_back(job_id);
+#else
   status = qpl_execute_job(job);
   VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
+  qpl_fini_job(qpl_job_pool.GetJobById(job_id));
+  qpl_job_pool.ReleaseJob(job_id);
+#endif
+
+  // status = qpl_execute_job(job);
+  // VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
 
   inputBits += inputBufferLen;
+  result += numValues;
 
-  std::free(job);
+  // std::free(job);
   return;
 }
 #endif
@@ -844,7 +883,8 @@ inline void unpack<uint32_t>(
     uint64_t inputBufferLen,
     uint64_t numValues,
     uint8_t bitWidth,
-    uint32_t* FOLLY_NONNULL& result) {
+    uint32_t* FOLLY_NONNULL& result,
+    std::vector<uint32_t>& qpl_job_ids) {
   VELOX_CHECK(bitWidth >= 1 && bitWidth <= 32);
   VELOX_CHECK((numValues & 0x7) == 0);
   VELOX_CHECK(inputBufferLen * 8 >= bitWidth * numValues);
@@ -917,7 +957,8 @@ inline void unpack<uint32_t>(
     uint64_t inputBufferLen,
     uint64_t numValues,
     uint8_t bitWidth,
-    uint32_t* FOLLY_NONNULL& result) {     
+    uint32_t* FOLLY_NONNULL& result,
+    std::vector<uint32_t>& qpl_job_ids) {     
   // sleep(10);
   // VELOX_CHECK(bitWidth >= 1 && bitWidth <= 32);
   // VELOX_CHECK((numValues & 0x7) == 0);
@@ -939,14 +980,14 @@ inline void unpack<uint32_t>(
   // std::cout << "unpack uint32_t bitWidth: " << bitWidth << std::endl;
 
   // qpl_job* job    = (qpl_job *) std::malloc(size);
-  facebook::velox::QplJobHWPool& qpl_job_pool = facebook::velox::QplJobHWPool::GetInstance();
+  facebook::velox::dwio::common::QplJobHWPool& qpl_job_pool = facebook::velox::dwio::common::QplJobHWPool::GetInstance();
   uint32_t job_id = 0;
   qpl_job* job = qpl_job_pool.AcquireJob(job_id);
   // while (job == nullptr) {
   //   job = qpl_job_pool.AcquireJob(job_id);
   // }
-  status = qpl_init_job(qpl_path_hardware, job);
-  VELOX_DCHECK(status == QPL_STS_OK, "Initialization of QPL Job failed");
+  // status = qpl_init_job(qpl_path_hardware, job);
+  // VELOX_DCHECK(status == QPL_STS_OK, "Initialization of QPL Job failed");
 
   job->next_in_ptr = const_cast<uint8_t*>(inputBits);
   job->available_in = static_cast<uint32_t>(inputBufferLen);
@@ -954,7 +995,8 @@ inline void unpack<uint32_t>(
   job->available_out = static_cast<uint32_t>(numValues * sizeof(uint32_t));
   job->op = qpl_op_extract;
   job->src1_bit_width = bitWidth;
-  job->num_input_elements = static_cast<uint32_t>(inputBufferLen * 8 / bitWidth);
+  job->num_input_elements = static_cast<uint32_t>(numValues);
+  // job->num_input_elements = static_cast<uint32_t>(inputBufferLen * 8 / bitWidth);
   job->out_bit_width = qpl_ow_32;
   job->param_low          = 0;
   job->param_high         = numValues;
@@ -962,8 +1004,7 @@ inline void unpack<uint32_t>(
 #ifdef VELOX_QPL_ASYNC_MODE
   status = qpl_submit_job(job);
   VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
-  // status = qpl_wait_job(job);
-  // VELOX_DCHECK(status == QPL_STS_OK, "Wait of QPL Job failed");
+  qpl_job_ids.push_back(job_id);
 #else
   status = qpl_execute_job(job);
   VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
@@ -972,11 +1013,44 @@ inline void unpack<uint32_t>(
 #endif
 
   // std::free(job);
-  inputBits += inputBufferLen;
+  // inputBits += inputBufferLen;
+  // result += numValues;
   return;
 }
 #endif
 
+#ifdef VELOX_ENABLE_QPL
+  template <typename T>
+  void unpack_uint(const uint8_t* FOLLY_NONNULL& inputBits,
+    uint64_t inputBufferLen,
+    uint64_t numValues,
+    uint8_t bitWidth,
+    T* result,
+    std::vector<uint32_t>& qpl_job_ids
+    ) {
+
+    dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
+    dwio::common::unpack<T>(inputBits,
+      inputBufferLen,
+      numValues,
+      bitWidth,
+      result,
+      qpl_job_ids);
+      
+      // for (int i = 0; i < qpl_job_ids.size(); i++) {
+      //   if (qpl_job_pool.job_status(qpl_job_ids[i])) {
+      //     auto status = qpl_wait_job(qpl_job_pool.GetJobById(qpl_job_ids[i]));
+      //     if (status != QPL_STS_OK) {
+      //       std::cout << "qpl execution error: " << status << std::endl;
+      //     }
+          
+      //     qpl_fini_job(qpl_job_pool.GetJobById(qpl_job_ids[i]));
+      //     qpl_job_pool.ReleaseJob(qpl_job_ids[i]);
+      //   }
+      // }
+      return;
+  }
+#endif
 // Loads a bit field from 'ptr' + bitOffset for up to 'bitWidth' bits. makes
 // sure not to access bytes past lastSafeWord + 7. The definition is put here
 // because it's inlined.

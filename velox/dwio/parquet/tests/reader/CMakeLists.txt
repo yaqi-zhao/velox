@@ -45,6 +45,17 @@ target_link_libraries(
   ${FOLLY_WITH_DEPENDENCIES}
   ${FOLLY_BENCHMARK})
 
+add_executable(velox_dwio_parquet_reader_rle_benchmark ParquetReaderBenchmark_RLE.cpp)
+target_link_libraries(
+  velox_dwio_parquet_reader_rle_benchmark
+  velox_dwio_parquet_reader
+  velox_dwio_parquet_writer
+  velox_exec_test_lib
+  velox_exec
+  velox_hive_connector
+  ${FOLLY_WITH_DEPENDENCIES}
+  ${FOLLY_BENCHMARK})
+
 add_executable(velox_dwio_parquet_structure_decoder_test
                NestedStructureDecoderTest.cpp)
 add_test(

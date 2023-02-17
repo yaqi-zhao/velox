@@ -21,6 +21,7 @@
 #include "velox/dwio/common/DecoderUtil.h"
 #include "velox/type/Filter.h"
 #include "velox/vector/LazyVector.h"
+#include "velox/dwio/common/QplJobPool.h"
 
 #include <folly/Varint.h>
 
@@ -43,58 +44,83 @@ class RleBpDecoder {
 
   /// Decode @param numValues number of values and copy the decoded values into
   /// @param outputBuffer
-  // template <typename T>
-  // void next(T* FOLLY_NONNULL& outputBuffer, uint64_t numValues) {
-  //   while (numValues > 0) {
-  //     if (numRemainingUnpackedValues_ > 0) {
-  //       auto numValuesToRead =
-  //           std::min<uint64_t>(numValues, numRemainingUnpackedValues_);
-  //       copyRemainingUnpackedValues(outputBuffer, numValuesToRead);
+  template <typename T>
+  void next(T* FOLLY_NONNULL& outputBuffer, uint64_t numValues) {
+    std::vector<uint32_t> qpl_job_ids;
+    while (numValues > 0) {
+      if (numRemainingUnpackedValues_ > 0) {
+        auto numValuesToRead =
+            std::min<uint64_t>(numValues, numRemainingUnpackedValues_);
+        copyRemainingUnpackedValues(outputBuffer, numValuesToRead);
 
-  //       numValues -= numValuesToRead;
-  //     } else {
-  //       if (remainingValues_ == 0) {
-  //         readHeader();
-  //       }
+        numValues -= numValuesToRead;
+      } else {
+        if (remainingValues_ == 0) {
+          readHeader();
+        }
 
-  //       auto numValuesToRead = std::min<uint32_t>(numValues, remainingValues_);
-  //       if (repeating_) {
-  //         std::fill(outputBuffer, outputBuffer + numValuesToRead, value_);
-  //         outputBuffer += numValuesToRead;
-  //         remainingValues_ -= numValuesToRead;
-  //       } else {
-  //         remainingUnpackedValuesOffset_ = 0;
-  //         // The parquet standard requires the bit packed values are always a
-  //         // multiple of 8. So we read a multiple of 8 values each time
-  //         dwio::common::unpack<T>(
-  //             reinterpret_cast<const uint8_t*&>(bufferStart_),
-  //             bufferEnd_ - bufferStart_,
-  //             numValuesToRead & 0xfffffff8,
-  //             bitWidth_,
-  //             reinterpret_cast<T * FOLLY_NONNULL&>(outputBuffer));
-  //         remainingValues_ -= (numValuesToRead & 0xfffffff8);
+        auto numValuesToRead = std::min<uint32_t>(numValues, remainingValues_);
+        if (repeating_) {
+          std::fill(outputBuffer, outputBuffer + numValuesToRead, value_);
+          outputBuffer += numValuesToRead;
+          remainingValues_ -= numValuesToRead;
+        } else {
+          remainingUnpackedValuesOffset_ = 0;
+          // The parquet standard requires the bit packed values are always a
+          // multiple of 8. So we read a multiple of 8 values each time
+          
+          dwio::common::unpack<T>(
+              reinterpret_cast<const uint8_t*&>(bufferStart_),
+              bufferEnd_ - bufferStart_,
+#ifndef VELOX_ENABLE_QPL
+              numValuesToRead & 0xfffffff8,
+#else
+              numValuesToRead,
+#endif                            
+              bitWidth_,
+              reinterpret_cast<T * FOLLY_NONNULL&>(outputBuffer),
+              qpl_job_ids);
+          remainingValues_ -= (numValuesToRead & 0xfffffff8);
 
-  //         // Unpack the next 8 values to remainingUnpackedValues_ if necessary
-  //         if ((numValuesToRead & 7) != 0) {
-  //           T* output = reinterpret_cast<T*>(remainingUnpackedValues_);
-  //           dwio::common::unpack<T>(
-  //               reinterpret_cast<const uint8_t*&>(bufferStart_),
-  //               bufferEnd_ - bufferStart_,
-  //               8,
-  //               bitWidth_,
-  //               output);
-  //           numRemainingUnpackedValues_ = 8;
-  //           remainingUnpackedValuesOffset_ = 0;
+#ifndef VELOX_ENABLE_QPL          
+          // Unpack the next 8 values to remainingUnpackedValues_ if necessary
+          if ((numValuesToRead & 7) != 0) {
+            T* output = reinterpret_cast<T*>(remainingUnpackedValues_);
+            dwio::common::unpack<T>(
+                reinterpret_cast<const uint8_t*&>(bufferStart_),
+                bufferEnd_ - bufferStart_,
+                8,
+                bitWidth_,
+                output);
+            numRemainingUnpackedValues_ = 8;
+            remainingUnpackedValuesOffset_ = 0;
 
-  //           copyRemainingUnpackedValues(outputBuffer, numValuesToRead & 7);
-  //           remainingValues_ -= 8;
-  //         }
-  //       }
+            copyRemainingUnpackedValues(outputBuffer, numValuesToRead & 7);
+            remainingValues_ -= 8;
+          }
+#endif          
+        }
 
-  //       numValues -= numValuesToRead;
-  //     }
-  //   }
-  // }
+        numValues -= numValuesToRead;
+        outputBuffer += numValuesToRead;
+      }
+    }
+
+#ifdef VELOX_ENABLE_QPL
+    facebook::velox::dwio::common::QplJobHWPool& qpl_job_pool = facebook::velox::dwio::common::QplJobHWPool::GetInstance();
+    for (int i = 0; i < qpl_job_ids.size(); i++) {
+      if (qpl_job_pool.job_status(qpl_job_ids[i])) {
+        auto status = qpl_wait_job(qpl_job_pool.GetJobById(qpl_job_ids[i]));
+        if (status != QPL_STS_OK) {
+          std::cout << "qpl execution error: " << status << std::endl;
+        }
+        
+        qpl_fini_job(qpl_job_pool.GetJobById(qpl_job_ids[i]));
+        qpl_job_pool.ReleaseJob(qpl_job_ids[i]);
+      }
+    }
+#endif    
+  }
 
   /// Copies 'numValues' bits from the encoding into 'buffer',
   /// little-endian. If 'allOnes' is non-nullptr, this function may

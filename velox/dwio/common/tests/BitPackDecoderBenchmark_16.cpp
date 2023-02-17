@@ -63,10 +63,10 @@ template <typename T>
 void veloxBitUnpack(uint8_t bitWidth, T* result) {
   const uint8_t* inputIter =
       reinterpret_cast<const uint8_t*>(bitPackedData[bitWidth].data());
-
+  std::vector<uint32_t> qpl_job_ids;
   auto startTime = system_clock::now();
   facebook::velox::dwio::common::unpack<T>(
-      inputIter, BYTES(kNumValues, bitWidth), kNumValues, bitWidth, result);
+      inputIter, BYTES(kNumValues, bitWidth), kNumValues, bitWidth, result, qpl_job_ids);
   auto curTime = system_clock::now();
   size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
         curTime - startTime).count();
@@ -87,9 +87,10 @@ template <typename T>
 void veloxBitUnpack_1(uint8_t bitWidth, T* result) {
   const uint8_t* inputIter =
       reinterpret_cast<const uint8_t*>(bitPackedData[bitWidth].data());
+  std::vector<uint32_t> qpl_job_ids;
 
   facebook::velox::dwio::common::unpack<T>(
-      inputIter, BYTES(kNumValues, bitWidth), kNumValues, bitWidth, result);
+      inputIter, BYTES(kNumValues, bitWidth), kNumValues, bitWidth, result, qpl_job_ids);
   return;
 }
 

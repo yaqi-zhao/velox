@@ -41,7 +41,8 @@ using std::chrono::system_clock;
 using RowSet = folly::Range<const facebook::velox::vector_size_t*>;
 
 // static const uint64_t kNumValues = 1024768 * 8;
-uint64_t kNumValues = 1024768 * 64 * 4; //1G
+// uint64_t kNumValues = 1024768 * 64 * 4; //1G
+uint64_t kNumValues = 480; //1G
 
 // Array of bit packed representations of randomInts_u32. The array at index i
 // is packed i bits wide and the values come from the low bits of
@@ -81,18 +82,19 @@ void veloxBitUnpack(uint8_t bitWidth, T* result) {
   const uint8_t* inputIter =
       reinterpret_cast<const uint8_t*>(bitPackedData[bitWidth].data());
   auto startTime = system_clock::now();
+  std::vector<uint32_t> qpl_job_ids;
   facebook::velox::dwio::common::unpack<T>(
-      inputIter, BYTES(kNumValues, bitWidth), kNumValues, bitWidth, result);
+      inputIter, BYTES(kNumValues, bitWidth), kNumValues, bitWidth, result, qpl_job_ids);
 #ifdef VELOX_QPL_ASYNC_MODE  
-  facebook::velox::QplJobHWPool& qpl_job_pool = facebook::velox::QplJobHWPool::GetInstance();
-  for (int i = 0; i < 1024; i++) {
-    if (qpl_job_pool.job_status(i)) {
-      auto status = qpl_wait_job(qpl_job_pool.GetJobById(i));
+  facebook::velox::dwio::common::QplJobHWPool& qpl_job_pool = facebook::velox::dwio::common::QplJobHWPool::GetInstance();
+  for (int i = 0; i < qpl_job_ids.size(); i++) {
+    if (qpl_job_pool.job_status(qpl_job_ids[i])) {
+      auto status = qpl_wait_job(qpl_job_pool.GetJobById(qpl_job_ids[i]));
       if (status != QPL_STS_OK) {
         std::cout << "qpl execution error: " << status << std::endl;
       }
-      qpl_fini_job(qpl_job_pool.GetJobById(i));
-      qpl_job_pool.ReleaseJob(i);
+      qpl_fini_job(qpl_job_pool.GetJobById(qpl_job_ids[i]));
+      qpl_job_pool.ReleaseJob(qpl_job_ids[i]);
       
     }
   }
@@ -116,50 +118,38 @@ void run_simple_benchmark() {
 }
 
 template <typename T>
-void veloxBitUnpack_1(uint8_t bitWidth, T* result) {
+void veloxBitUnpack_1(uint8_t bitWidth, T* result, std::vector<uint32_t>& qpl_job_ids) {
   const uint8_t* inputIter =
       reinterpret_cast<const uint8_t*>(bitPackedData[bitWidth].data());
-
+  
   facebook::velox::dwio::common::unpack<T>(
-      inputIter, BYTES(kNumValues, bitWidth), kNumValues, bitWidth, result);
+      inputIter, BYTES(kNumValues, bitWidth), kNumValues, bitWidth, result, qpl_job_ids);
   return;
 }
 
-void bitUnpack(uint8_t bitWidth, int index) {
-  veloxBitUnpack_1<uint32_t>(bitWidth, results[index].data());
+void bitUnpack(uint8_t bitWidth, int index, std::vector<uint32_t>& qpl_job_ids) {
+  veloxBitUnpack_1<uint32_t>(bitWidth, results[index].data(), qpl_job_ids);
 }
 
 
 void parallelBitUnpack(uint8_t thread_num, uint8_t bitWidth) {
   auto startTime = system_clock::now();
-  // std::vector<std::thread> thread_pool(thread_num);
-  // for (int i = 0; i < thread_num; i++) {
-  //   thread_pool[i] = std::thread(bitUnpack, bitWidth, i);
-  // }
-
+  std::vector<uint32_t> qpl_job_ids;
   for (int i = 0; i < thread_num; i++) {
-    bitUnpack(bitWidth, i);
+    bitUnpack(bitWidth, i, qpl_job_ids);
   }
 
-  // for (auto& t: thread_pool) {
-  //     t.join();
-  //     // sleep(1);
-  // }
-  // auto curTime_0 = system_clock::now();
-  // size_t msElapsed_0 = std::chrono::duration_cast<std::chrono::microseconds>(
-  //       curTime_0 - startTime).count();
-  // printf("unpack_%d_%d               init   time:%dus\n", int(bitWidth), int(sizeof(uint32_t) * 8), (int)(msElapsed_0));
 #ifdef VELOX_QPL_ASYNC_MODE  
-  facebook::velox::QplJobHWPool& qpl_job_pool = facebook::velox::QplJobHWPool::GetInstance();
-  for (int i = 0; i < 1024; i++) {
-    if (qpl_job_pool.job_status(i)) {
-      auto status = qpl_wait_job(qpl_job_pool.GetJobById(i));
+  facebook::velox::dwio::common::QplJobHWPool& qpl_job_pool = facebook::velox::dwio::common::QplJobHWPool::GetInstance();
+  for (int i = 0; i < qpl_job_ids.size(); i++) {
+    if (qpl_job_pool.job_status(qpl_job_ids[i])) {
+      auto status = qpl_wait_job(qpl_job_pool.GetJobById(qpl_job_ids[i]));
       if (status != QPL_STS_OK) {
         std::cout << "qpl execution error: " << status << std::endl;
       }
       
-      qpl_fini_job(qpl_job_pool.GetJobById(i));
-      qpl_job_pool.ReleaseJob(i);
+      qpl_fini_job(qpl_job_pool.GetJobById(qpl_job_ids[i]));
+      qpl_job_pool.ReleaseJob(qpl_job_ids[i]);
     }
   }
 #endif  
@@ -167,7 +157,7 @@ void parallelBitUnpack(uint8_t thread_num, uint8_t bitWidth) {
   size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
         curTime - startTime).count();
   printf("unpack_%d_%d                  time:%dus\n", int(bitWidth), int(sizeof(uint32_t) * 8), (int)(msElapsed));
-  // checkDecodeResult(randomInts_u32.data(), allRows, bitWidth, results[0].data());
+  // checkDecodeResult(randomInts_u32.data(), allRows, bitWidth, results[10].data());
   // printf("check success");
   return;
 
@@ -232,6 +222,7 @@ void populateBitPacked() {
   // Populate uint32 buffer
   for (int total_num = 8; total_num <= 8; total_num = total_num* 2) {
     kNumValues = 1024768 * total_num;
+    // kNumValues = 480;
     std::cout << "kNumValues: " << kNumValues << std::endl;
     for (int32_t i = 0; i < kNumValues; i++) {
       auto randomInt = folly::Random::rand32();

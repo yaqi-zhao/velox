@@ -48,7 +48,7 @@ class ParquetReaderBenchmark {
     pool_ = memory::getDefaultMemoryPool();
     dataSetBuilder_ = std::make_unique<DataSetBuilder>(*pool_.get(), 0);
 
-    auto sink = std::make_unique<LocalFileSink>("/tmp/test.parquet");
+    // auto sink = std::make_unique<LocalFileSink>("/tmp/test.parquet");
     std::shared_ptr<::parquet::WriterProperties> writerProperties;
     if (disableDictionary_) {
       // The parquet file is in plain encoding format.
@@ -58,21 +58,21 @@ class ParquetReaderBenchmark {
       // The parquet file is in dictionary encoding format.
       writerProperties = ::parquet::WriterProperties::Builder().build();
     }
-    writer_ = std::make_unique<facebook::velox::parquet::Writer>(
-        std::move(sink), *pool_, 10000, writerProperties);
+    // writer_ = std::make_unique<facebook::velox::parquet::Writer>(
+        // std::move(sink), *pool_, 10000, writerProperties);
   }
 
   ~ParquetReaderBenchmark() {
-    writer_->close();
+    // writer_->close();
   }
 
   void writeToFile(
       const std::vector<RowVectorPtr>& batches,
       bool /*forRowGroupSkip*/) {
     for (auto& batch : batches) {
-      writer_->write(batch);
+      // writer_->write(batch);
     }
-    writer_->flush();
+    // writer_->flush();
   }
 
   FilterSpec createFilterSpec(
@@ -122,10 +122,11 @@ class ParquetReaderBenchmark {
   std::unique_ptr<RowReader> createReader(
       const ParquetReaderType& parquetReaderType,
       std::shared_ptr<ScanSpec> scanSpec,
-      const RowTypePtr& rowType) {
+      const RowTypePtr& rowType,
+      uint32_t nextSize) {
     dwio::common::ReaderOptions readerOpts{pool_.get()};
     auto input = std::make_unique<BufferedInput>(
-        std::make_shared<LocalReadFile>("/tmp/test.parquet"),
+        std::make_shared<LocalReadFile>("/tmp/test_" + std::to_string(nextSize) + ".parquet"),
         readerOpts.getMemoryPool());
 
     std::unique_ptr<Reader> reader;
@@ -156,7 +157,7 @@ class ParquetReaderBenchmark {
       const RowTypePtr& rowType,
       std::shared_ptr<ScanSpec> scanSpec,
       uint32_t nextSize) {
-    auto rowReader = createReader(parquetReaderType, scanSpec, rowType);
+    auto rowReader = createReader(parquetReaderType, scanSpec, rowType, nextSize);
     runtimeStats_ = dwio::common::RuntimeStatistics();
 
     rowReader->resetFilterCaches();
@@ -207,7 +208,7 @@ class ParquetReaderBenchmark {
             .withRowGroupSpecificData(kNumRowsPerRowGroup)
             .withNullsForField(Subfield(columnName), nullsRateX100)
             .build();
-    writeToFile(*batches, true);
+    // writeToFile(*batches, true);
     std::vector<FilterSpec> filterSpecs;
 
     //    Filters on List and Map are not supported currently.
@@ -218,9 +219,10 @@ class ParquetReaderBenchmark {
 
     std::vector<uint64_t> hitRows;
     auto scanSpec = createScanSpec(*batches, rowType, filterSpecs, hitRows);
+    // auto scanSpec = nullptr;
 
     suspender.dismiss();
-    // auto startTime = system_clock::now();
+    auto startTime = system_clock::now();
 
     // Filter range is generated from a small sample data of 4096 rows. So the
     // upperBound and lowerBound are introduced to estimate the result size.
@@ -235,6 +237,11 @@ class ParquetReaderBenchmark {
     read(parquetReaderType, rowType, scanSpec, nextSize);
     read(parquetReaderType, rowType, scanSpec, nextSize);
 
+    auto curTime = system_clock::now();
+    size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+          curTime - startTime).count();
+    
+    printf("ParquetReader_%d_%.0f_%.0f    time:%dus\n", int(nextSize), startPct, selectPct, (int)(msElapsed));        
     // Add one to expected to avoid 0 in calculating upperBound and lowerBound.
     int expected = kNumBatches * kNumRowsPerBatch *
             (1 - (double)nullsRateX100 / 100) * ((double)selectPct / 100) +
@@ -253,18 +260,13 @@ class ParquetReaderBenchmark {
         "Result Size {} and Expected Size {} Mismatch",
         resultSize,
         expected);
-    // auto curTime = system_clock::now();
-    // size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
-    //       curTime - startTime).count();
-    
-    // printf("ParquetReader_%d_%.0f_%.0f    time:%dus\n", int(nextSize), startPct, selectPct, (int)(msElapsed));        
   }
 
  private:
   std::unique_ptr<test::DataSetBuilder> dataSetBuilder_;
   std::shared_ptr<memory::MemoryPool> pool_;
   dwio::common::DataSink* sinkPtr_;
-  std::unique_ptr<facebook::velox::parquet::Writer> writer_;
+  // std::unique_ptr<facebook::velox::parquet::Writer> writer_;
   RuntimeStatistics runtimeStats_;
   bool disableDictionary_;
 };
@@ -292,13 +294,58 @@ void run(
 #define PARQUET_BENCHMARKS_FILTER_NULLS(_type_, _name_, _filter_, _null_) \
   BENCHMARK_NAMED_PARAM(                                                  \
       run,                                                                \
+      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_5k_dict,         \
+      #_name_,                                                            \
+      _type_,                                                             \
+      _filter_,                                                           \
+      _null_,                                                             \
+      5000,                                                               \
+      false);                                                             \
+  BENCHMARK_NAMED_PARAM(                                                  \
+      run,                                                                \
+      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_10k_dict,         \
+      #_name_,                                                            \
+      _type_,                                                             \
+      _filter_,                                                           \
+      _null_,                                                             \
+      10000,                                                               \
+      false);                                                             \
+  BENCHMARK_NAMED_PARAM(                                                  \
+      run,                                                                \
+      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_20k_dict,         \
+      #_name_,                                                            \
+      _type_,                                                             \
+      _filter_,                                                           \
+      _null_,                                                             \
+      20000,                                                               \
+      false);                                                             \
+  BENCHMARK_NAMED_PARAM(                                                  \
+      run,                                                                \
+      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_50k_dict,         \
+      #_name_,                                                            \
+      _type_,                                                             \
+      _filter_,                                                           \
+      _null_,                                                             \
+      50000,                                                               \
+      false);                                                             \
+  BENCHMARK_NAMED_PARAM(                                                  \
+      run,                                                                \
       _name_##_Filter_##_filter_##_Nulls_##_null_##_next_100k_dict,         \
       #_name_,                                                            \
       _type_,                                                             \
       _filter_,                                                           \
       _null_,                                                             \
-      10000000,                                                               \
+      100000,                                                               \
       false);                                                             \
+  BENCHMARK_NAMED_PARAM(                                                  \
+      run,                                                                \
+      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_10000k_dict,         \
+      #_name_,                                                            \
+      _type_,                                                             \
+      _filter_,                                                           \
+      _null_,                                                             \
+      10000000,                                                               \
+      false);                                                             \  
   BENCHMARK_DRAW_LINE();
 
 #define PARQUET_BENCHMARKS_FILTERS(_type_, _name_, _filter_)    \
