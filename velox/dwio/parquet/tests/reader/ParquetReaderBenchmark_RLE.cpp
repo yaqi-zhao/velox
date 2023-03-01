@@ -20,6 +20,7 @@
 #include "velox/dwio/common/tests/utils/DataSetBuilder.h"
 #include "velox/dwio/parquet/RegisterParquetReader.h"
 #include "velox/dwio/parquet/duckdb_reader/ParquetReader.h"
+#include "velox/dwio/parquet/qpl_reader/ParquetReader.h"
 #include "velox/dwio/parquet/reader/ParquetReader.h"
 #include "velox/dwio/parquet/writer/Writer.h"
 
@@ -138,6 +139,9 @@ class ParquetReaderBenchmark {
         reader = std::make_unique<duckdb_reader::ParquetReader>(
             input->getInputStream(), readerOpts);
         break;
+      case ParquetReaderType::QPL:
+        reader = std::make_unique<qpl_reader::ParquetReader>(std::move(input), readerOpts);
+        break;        
       default:
         VELOX_UNSUPPORTED("Only native or DuckDB Parquet reader is supported");
     }
@@ -163,6 +167,7 @@ class ParquetReaderBenchmark {
     rowReader->resetFilterCaches();
     auto result = BaseVector::create(rowType, 1, pool_.get());
     int resultSize = 0;
+    // auto startTime = system_clock::now();
     while (true) {
       bool hasData = rowReader->next(nextSize, result);
 
@@ -187,6 +192,11 @@ class ParquetReaderBenchmark {
         resultSize += !rowVector->childAt(0)->isNullAt(i);
       }
     }
+    // auto curTime = system_clock::now();
+    // size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+    //       curTime - startTime).count();
+    
+    // printf("ParquetReader_%d    time:%dus\n", int(nextSize),  (int)(msElapsed));      
 
     rowReader->updateRuntimeStats(runtimeStats_);
     return resultSize;
@@ -222,7 +232,7 @@ class ParquetReaderBenchmark {
     // auto scanSpec = nullptr;
 
     suspender.dismiss();
-    auto startTime = system_clock::now();
+    // auto startTime = system_clock::now();
 
     // Filter range is generated from a small sample data of 4096 rows. So the
     // upperBound and lowerBound are introduced to estimate the result size.
@@ -237,11 +247,11 @@ class ParquetReaderBenchmark {
     read(parquetReaderType, rowType, scanSpec, nextSize);
     read(parquetReaderType, rowType, scanSpec, nextSize);
 
-    auto curTime = system_clock::now();
-    size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
-          curTime - startTime).count();
+    // auto curTime = system_clock::now();
+    // size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+    //       curTime - startTime).count();
     
-    printf("ParquetReader_%d_%.0f_%.0f    time:%dus\n", int(nextSize), startPct, selectPct, (int)(msElapsed));        
+    // printf("ParquetReader_%d_%.0f_%.0f    time:%dus\n", int(nextSize), startPct, selectPct, (int)(msElapsed));        
     // Add one to expected to avoid 0 in calculating upperBound and lowerBound.
     int expected = kNumBatches * kNumRowsPerBatch *
             (1 - (double)nullsRateX100 / 100) * ((double)selectPct / 100) +
@@ -294,21 +304,21 @@ void run(
 #define PARQUET_BENCHMARKS_FILTER_NULLS(_type_, _name_, _filter_, _null_) \
   BENCHMARK_NAMED_PARAM(                                                  \
       run,                                                                \
-      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_5k_dict,         \
-      #_name_,                                                            \
-      _type_,                                                             \
-      _filter_,                                                           \
-      _null_,                                                             \
-      5000,                                                               \
-      false);                                                             \
-  BENCHMARK_NAMED_PARAM(                                                  \
-      run,                                                                \
       _name_##_Filter_##_filter_##_Nulls_##_null_##_next_10k_dict,         \
       #_name_,                                                            \
       _type_,                                                             \
       _filter_,                                                           \
       _null_,                                                             \
       10000,                                                               \
+      false);                                                             \
+  BENCHMARK_NAMED_PARAM(                                                  \
+      run,                                                                \
+      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_4k_dict,         \
+      #_name_,                                                            \
+      _type_,                                                             \
+      _filter_,                                                           \
+      _null_,                                                             \
+      4000,                                                               \
       false);                                                             \
   BENCHMARK_NAMED_PARAM(                                                  \
       run,                                                                \
@@ -339,12 +349,12 @@ void run(
       false);                                                             \
   BENCHMARK_NAMED_PARAM(                                                  \
       run,                                                                \
-      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_10000k_dict,         \
+      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_5k_dict,         \
       #_name_,                                                            \
       _type_,                                                             \
       _filter_,                                                           \
       _null_,                                                             \
-      10000000,                                                               \
+      5000,                                                               \
       false);                                                             \  
   BENCHMARK_DRAW_LINE();
 
@@ -383,7 +393,7 @@ PARQUET_BENCHMARKS(INTEGER(), INTEGER);
 // TODO: Add all data types
 
 int main(int argc, char** argv) {
-  // sleep(20);
+  sleep(10);
 #ifdef VELOX_ENABLE_QPL  
   dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
 #endif  

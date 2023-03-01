@@ -14,6 +14,7 @@
 
 add_library(
   velox_dwio_native_parquet_reader
+  compression_qpl.cpp
   NestedStructureDecoder.cpp
   ParquetReader.cpp
   ParquetTypeWithId.cpp

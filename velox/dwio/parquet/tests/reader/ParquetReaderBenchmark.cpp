@@ -56,7 +56,7 @@ class ParquetReaderBenchmark {
           ::parquet::WriterProperties::Builder().disable_dictionary()->build();
     } else {
       // The parquet file is in dictionary encoding format.
-      writerProperties = ::parquet::WriterProperties::Builder().build();
+      writerProperties = ::parquet::WriterProperties::Builder().compression(::parquet::Compression::SNAPPY)->build();
     }
     writer_ = std::make_unique<facebook::velox::parquet::Writer>(
         std::move(sink), *pool_, 10000, writerProperties);
@@ -292,12 +292,12 @@ void run(
 #define PARQUET_BENCHMARKS_FILTER_NULLS(_type_, _name_, _filter_, _null_) \
   BENCHMARK_NAMED_PARAM(                                                  \
       run,                                                                \
-      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_100k_dict,         \
+      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_10k_dict,         \
       #_name_,                                                            \
       _type_,                                                             \
       _filter_,                                                           \
       _null_,                                                             \
-      10000000,                                                               \
+      10000,                                                               \
       false);                                                             \
   BENCHMARK_DRAW_LINE();
 

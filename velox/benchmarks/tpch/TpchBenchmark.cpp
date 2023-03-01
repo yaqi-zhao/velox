@@ -32,6 +32,7 @@
 #include "velox/functions/prestosql/aggregates/RegisterAggregateFunctions.h"
 #include "velox/functions/prestosql/registration/RegistrationFunctions.h"
 #include "velox/parse/TypeResolver.h"
+// #include "velox/dwio/parquet/qpl_reader/PageReader.h"
 
 using namespace facebook::velox;
 using namespace facebook::velox::exec;
@@ -121,9 +122,9 @@ class TpchBenchmark {
     parse::registerTypeResolver();
     filesystems::registerLocalFileSystem();
     if (FLAGS_use_native_parquet_reader) {
-      parquet::registerParquetReaderFactory(parquet::ParquetReaderType::NATIVE);
+      facebook::velox::parquet::registerParquetReaderFactory(parquet::ParquetReaderType::NATIVE);
     } else {
-      parquet::registerParquetReaderFactory(parquet::ParquetReaderType::DUCKDB);
+      facebook::velox::parquet::registerParquetReaderFactory(parquet::ParquetReaderType::QPL);
     }
     dwrf::registerDwrfReaderFactory();
     ioExecutor_ = std::make_unique<folly::IOThreadPoolExecutor>(8);

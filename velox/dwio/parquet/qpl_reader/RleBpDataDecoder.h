@@ -21,23 +21,28 @@
 #include "velox/dwio/common/BitPackDecoder.h"
 #include "velox/dwio/common/DecoderUtil.h"
 #include "velox/dwio/common/TypeUtil.h"
-#include "velox/dwio/parquet/reader/RleBpDecoder.h"
+#include "velox/dwio/parquet/qpl_reader/RleBpDecoder.h"
 
 using std::chrono::system_clock;
 
-namespace facebook::velox::parquet {
+namespace facebook::velox::parquet::qpl_reader {
 
 // This class will be used for dictionary Ids or other data that is RLE/BP
-// encoded.
-class RleBpDataDecoder : public facebook::velox::parquet::RleBpDecoder {
+// encded.o
+class RleBpDataDecoder : public facebook::velox::parquet::qpl_reader::RleBpDecoder {
  public:
-  using super = facebook::velox::parquet::RleBpDecoder;
+  using super = facebook::velox::parquet::qpl_reader::RleBpDecoder;
 
   RleBpDataDecoder(
       const char* FOLLY_NONNULL start,
       const char* FOLLY_NONNULL end,
       uint8_t bitWidth)
       : super::RleBpDecoder{start, end, bitWidth} {}
+
+  // RleBpDataDecoder(
+  //     const char* FOLLY_NONNULL pageData,
+  //     thrift::PageHeader pageHeader)
+  //     : super::RleBpDecoder{pageData, pageHeader, 0} {}
 
   template <bool hasNulls>
   inline void skip(
@@ -246,7 +251,7 @@ class RleBpDataDecoder : public facebook::velox::parquet::RleBpDecoder {
   }
 
 
-#ifdef VELOX_ENABLE_QPL   
+#ifdef VELOX_ENABLE_QPL
 template <bool hasFilter, bool hasHook, bool scatter, typename Visitor>
   void bulkScan_1(
       folly::Range<const int32_t*> nonNullRows,

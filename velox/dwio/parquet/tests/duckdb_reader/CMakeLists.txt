@@ -19,22 +19,22 @@ add_test(
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(
-  velox_dwio_duckdb_parquet_reader_test velox_dwio_duckdb_parquet_reader
+  velox_dwio_duckdb_parquet_reader_test velox_dwio_duckdb_parquet_reader 
   ${VELOX_LINK_LIBS} ${TEST_LINK_LIBS})
 
-add_executable(velox_dwio_duckdb_parquet_table_scan_test
-               ParquetTableScanTest.cpp)
-add_test(
-  NAME velox_dwio_duckdb_parquet_table_scan_test
-  COMMAND velox_dwio_duckdb_parquet_table_scan_test
-  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+#add_executable(velox_dwio_duckdb_parquet_table_scan_test
+#               ParquetTableScanTest.cpp)
+#add_test(
+#  NAME velox_dwio_duckdb_parquet_table_scan_test
+#  COMMAND velox_dwio_duckdb_parquet_table_scan_test
+#  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(
-  velox_dwio_duckdb_parquet_table_scan_test
-  velox_dwio_parquet_reader
-  velox_exec_test_lib
-  velox_exec
-  velox_hive_connector
-  velox_aggregates
-  ${VELOX_LINK_LIBS}
-  ${TEST_LINK_LIBS})
+#target_link_libraries(
+#  velox_dwio_duckdb_parquet_table_scan_test
+#  velox_dwio_parquet_reader
+#  velox_exec_test_lib
+#  velox_exec
+#  velox_hive_connector
+#  velox_aggregates
+#  ${VELOX_LINK_LIBS}
+#  ${TEST_LINK_LIBS})

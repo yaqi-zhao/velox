@@ -12,17 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_subdirectory(duckdb_reader)
-add_subdirectory(qpl_reader)
-add_subdirectory(thrift)
-add_subdirectory(reader)
-add_subdirectory(writer)
+add_library(
+  velox_dwio_qpl_parquet_reader
+  NestedStructureDecoder.cpp
+  ParquetReader.cpp
+  ParquetTypeWithId.cpp
+  PageReader.cpp
+  ParquetColumnReader.cpp
+  ParquetData.cpp
+  RepeatedColumnReader.cpp
+  RleBpDecoder.cpp
+  Statistics.cpp
+  StructColumnReader.cpp
+  StringColumnReader.cpp)
 
-if(${VELOX_BUILD_TESTING})
-  add_subdirectory(tests)
-endif()
-
-add_library(velox_dwio_parquet_reader RegisterParquetReader.cpp)
 target_link_libraries(
-  velox_dwio_parquet_reader velox_dwio_duckdb_parquet_reader
-  velox_dwio_native_parquet_reader velox_dwio_qpl_parquet_reader xsimd)
+  velox_dwio_qpl_parquet_reader
+  velox_dwio_parquet_thrift
+  velox_type
+  velox_dwio_common
+  arrow
+  parquet
+  thrift
+  ${FMT})
