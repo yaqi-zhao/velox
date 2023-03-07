@@ -20,6 +20,7 @@
 #include "velox/dwio/parquet/qpl_reader/NestedStructureDecoder.h"
 #include "velox/dwio/parquet/thrift/ThriftTransport.h"
 #include "velox/vector/FlatVector.h"
+#include "velox/dwio/parquet/qpl_reader/compression_qpl.h"
 
 
 #include <snappy.h>
@@ -218,6 +219,25 @@ const char* FOLLY_NONNULL PageReader::uncompressData(
           stream.msg ? stream.msg : "");
       return uncompressedData_->as<char>();
     }
+    case thrift::CompressionCodec::QPL:{
+      dwio::common::ensureCapacity<char>(
+        uncompressedData_, uncompressedSize, &pool_);
+
+      Qplcodec *qpl_dec=new Qplcodec(qpl_path_hardware,(qpl_compression_levels)1);
+
+      //Initjobs(qpl_path_software);
+      //qpl_dec->Getjob();
+      auto ret=qpl_dec->Decompress(
+          compressedSize,
+          (const uint8_t*)pageData,
+          uncompressedSize,
+          (uint8_t *)uncompressedData_->asMutable<char>());
+      if(ret){
+        //qpl_dec->Freejob();
+        delete qpl_dec;
+        return uncompressedData_->as<char>();
+      }
+    }  
     default:
       VELOX_FAIL("Unsupported Parquet compression type '{}'", codec_);
   }
@@ -389,7 +409,148 @@ void PageReader::prepareDataPageV2(const PageHeader& pageHeader, int64_t row) {
   }
 }
 
+
 void PageReader::prepareDictionary(const PageHeader& pageHeader) {
+  dictionary_.numValues = pageHeader.dictionary_page_header.num_values;
+  dictionaryEncoding_ = pageHeader.dictionary_page_header.encoding;
+  dictionary_.sorted = pageHeader.dictionary_page_header.__isset.is_sorted &&
+      pageHeader.dictionary_page_header.is_sorted;
+  VELOX_CHECK(
+      dictionaryEncoding_ == Encoding::PLAIN_DICTIONARY ||
+      dictionaryEncoding_ == Encoding::PLAIN);
+
+  if (codec_ != thrift::CompressionCodec::UNCOMPRESSED) {
+    pageData_ = readBytes(pageHeader.compressed_page_size, pageBuffer_);
+    pageData_ = uncompressData(
+        pageData_,
+        pageHeader.compressed_page_size,
+        pageHeader.uncompressed_page_size);
+  }
+
+  auto parquetType = type_->parquetType_.value();
+  switch (parquetType) {
+    case thrift::Type::INT32:
+    case thrift::Type::INT64:
+    case thrift::Type::FLOAT:
+    case thrift::Type::DOUBLE: {
+      int32_t typeSize = (parquetType == thrift::Type::INT32 ||
+                          parquetType == thrift::Type::FLOAT)
+          ? sizeof(float)
+          : sizeof(double);
+      auto numBytes = dictionary_.numValues * typeSize;
+      dictionary_.values = AlignedBuffer::allocate<char>(numBytes, &pool_);
+      if (pageData_) {
+        memcpy(dictionary_.values->asMutable<char>(), pageData_, numBytes);
+      } else {
+        dwio::common::readBytes(
+            numBytes,
+            inputStream_.get(),
+            dictionary_.values->asMutable<char>(),
+            bufferStart_,
+            bufferEnd_);
+      }
+      break;
+    }
+    case thrift::Type::BYTE_ARRAY: {
+      dictionary_.values =
+          AlignedBuffer::allocate<StringView>(dictionary_.numValues, &pool_);
+      auto numBytes = pageHeader.uncompressed_page_size;
+      auto values = dictionary_.values->asMutable<StringView>();
+      dictionary_.strings = AlignedBuffer::allocate<char>(numBytes, &pool_);
+      auto strings = dictionary_.strings->asMutable<char>();
+      if (pageData_) {
+        memcpy(strings, pageData_, numBytes);
+      } else {
+        dwio::common::readBytes(
+            numBytes, inputStream_.get(), strings, bufferStart_, bufferEnd_);
+      }
+      auto header = strings;
+      for (auto i = 0; i < dictionary_.numValues; ++i) {
+        auto length = *reinterpret_cast<const int32_t*>(header);
+        values[i] = StringView(header + sizeof(int32_t), length);
+        header += length + sizeof(int32_t);
+      }
+      VELOX_CHECK_EQ(header, strings + numBytes);
+      break;
+    }
+    case thrift::Type::FIXED_LEN_BYTE_ARRAY: {
+      auto parquetTypeLength = type_->typeLength_;
+      auto numParquetBytes = dictionary_.numValues * parquetTypeLength;
+      auto veloxTypeLength = type_->type->cppSizeInBytes();
+      auto numVeloxBytes = dictionary_.numValues * veloxTypeLength;
+      dictionary_.values = AlignedBuffer::allocate<char>(numVeloxBytes, &pool_);
+      auto data = dictionary_.values->asMutable<char>();
+      // Read the data bytes.
+      if (pageData_) {
+        memcpy(data, pageData_, numParquetBytes);
+      } else {
+        dwio::common::readBytes(
+            numParquetBytes,
+            inputStream_.get(),
+            data,
+            bufferStart_,
+            bufferEnd_);
+      }
+      if (type_->type->isShortDecimal()) {
+        // Parquet decimal values have a fixed typeLength_ and are in big-endian
+        // layout.
+        if (numParquetBytes < numVeloxBytes) {
+          auto values = dictionary_.values->asMutable<int64_t>();
+          for (auto i = dictionary_.numValues - 1; i >= 0; --i) {
+            // Expand the Parquet type length values to Velox type length.
+            // We start from the end to allow in-place expansion.
+            auto sourceValue = data + (i * parquetTypeLength);
+            int64_t value = *sourceValue >= 0 ? 0 : -1;
+            memcpy(
+                reinterpret_cast<uint8_t*>(&value) + veloxTypeLength -
+                    parquetTypeLength,
+                sourceValue,
+                parquetTypeLength);
+            values[i] = value;
+          }
+        }
+        auto values = dictionary_.values->asMutable<UnscaledShortDecimal>();
+        for (auto i = 0; i < dictionary_.numValues; ++i) {
+          values[i] = UnscaledShortDecimal(
+              __builtin_bswap64(values[i].unscaledValue()));
+        }
+        break;
+      } else if (type_->type->isLongDecimal()) {
+        // Parquet decimal values have a fixed typeLength_ and are in big-endian
+        // layout.
+        if (numParquetBytes < numVeloxBytes) {
+          auto values = dictionary_.values->asMutable<int128_t>();
+          for (auto i = dictionary_.numValues - 1; i >= 0; --i) {
+            // Expand the Parquet type length values to Velox type length.
+            // We start from the end to allow in-place expansion.
+            auto sourceValue = data + (i * parquetTypeLength);
+            int128_t value = *sourceValue >= 0 ? 0 : -1;
+            memcpy(
+                reinterpret_cast<uint8_t*>(&value) + veloxTypeLength -
+                    parquetTypeLength,
+                sourceValue,
+                parquetTypeLength);
+            values[i] = value;
+          }
+        }
+        auto values = dictionary_.values->asMutable<UnscaledLongDecimal>();
+        for (auto i = 0; i < dictionary_.numValues; ++i) {
+          values[i] = UnscaledLongDecimal(
+              dwio::common::builtin_bswap128(values[i].unscaledValue()));
+        }
+        break;
+      }
+      VELOX_UNSUPPORTED(
+          "Parquet type {} not supported for dictionary", parquetType);
+    }
+    case thrift::Type::INT96:
+    default:
+      VELOX_UNSUPPORTED(
+          "Parquet type {} not supported for dictionary", parquetType);
+  }
+}
+
+void PageReader::prepareDictionary_1(const PageHeader& pageHeader) {
   dictionary_.numValues = pageHeader.dictionary_page_header.num_values;
   dictionaryEncoding_ = pageHeader.dictionary_page_header.encoding;
   dictionary_.sorted = pageHeader.dictionary_page_header.__isset.is_sorted &&
@@ -405,6 +566,25 @@ void PageReader::prepareDictionary(const PageHeader& pageHeader) {
     //     pageData_,
     //     pageHeader.compressed_page_size,
     //     pageHeader.uncompressed_page_size);
+  }
+
+  auto parquetType = type_->parquetType_.value();
+  switch (parquetType) {
+    case thrift::Type::INT32:
+    case thrift::Type::INT64:
+    case thrift::Type::FLOAT:
+    case thrift::Type::DOUBLE: {
+      int32_t typeSize = (parquetType == thrift::Type::INT32 ||
+                          parquetType == thrift::Type::FLOAT)
+          ? sizeof(float)
+          : sizeof(double);
+      auto numBytes = dictionary_.numValues * typeSize;
+      dictionary_.values = AlignedBuffer::allocate<char>(numBytes, &pool_);
+      break;
+    }
+    default: 
+      // TODO
+      break;
   }
   return;
 
@@ -799,10 +979,10 @@ void PageReader::readNullsOnly(int64_t numValues, BufferPtr& buffer) {
 
 const uint64_t* FOLLY_NULLABLE
 PageReader::readNulls(int32_t numValues, BufferPtr& buffer) {
-  if (maxDefine_ == 0) {
+  // if (maxDefine_ == 0) {
     buffer = nullptr;
     return nullptr;
-  }
+  // }
   dwio::common::ensureCapacity<bool>(buffer, numValues, &pool_);
   if (isTopLevel_) {
     VELOX_CHECK_EQ(1, maxDefine_);

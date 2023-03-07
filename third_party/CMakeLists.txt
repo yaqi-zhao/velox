@@ -42,7 +42,7 @@ if(VELOX_ENABLE_ARROW)
       -DARROW_RUNTIME_SIMD_LEVEL=NONE
       -DARROW_WITH_UTF8PROC=OFF
       -DCMAKE_INSTALL_PREFIX=${ARROW_PREFIX}/install
-      -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+      -DCMAKE_BUILD_TYPE=Release
       -DARROW_BUILD_STATIC=ON
       -DARROW_WITH_QPL=ON
       -DThrift_SOURCE=${THRIFT_SOURCE})
@@ -68,7 +68,7 @@ if(VELOX_ENABLE_ARROW)
   ExternalProject_Add(
     arrow_ep
     PREFIX ${ARROW_PREFIX}
-    URL "https://github.com/ruclz/arrow-qpl/archive/refs/heads/main.zip"
+    URL "https://github.com/yaqi-zhao/arrow_1/archive/refs/heads/qpl_arrow.zip"
     SOURCE_SUBDIR cpp
     CMAKE_ARGS ${ARROW_CMAKE_ARGS}
     BUILD_BYPRODUCTS ${ARROW_LIBDIR}/libarrow.a ${ARROW_LIBDIR}/libparquet.a

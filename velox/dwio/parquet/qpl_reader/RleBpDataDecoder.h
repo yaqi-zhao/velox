@@ -383,7 +383,7 @@ template <bool hasFilter, bool hasHook, bool scatter, typename Visitor>
           size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
                 curTime - startTime).count();
           
-          printf("Rle decoder_%d    time:%dus\n", int(numAllRows),  (int)(msElapsed));   
+          // printf("Rle decoder_%d    time:%dus\n", int(numAllRows),  (int)(msElapsed));   
           return;
         }
         if (remainingValues_) {

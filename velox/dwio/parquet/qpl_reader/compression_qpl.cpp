@@ -7,6 +7,7 @@
 
 #ifdef VELOX_ENABLE_QPL  
 
+namespace facebook::velox::parquet::qpl_reader {
 #define job_size 100
 static qpl_job *job_pool[job_size];
 std::atomic<bool> job_status[job_size];
@@ -122,4 +123,6 @@ bool Qplcodec::Decompress(int64_t input_length, const uint8_t* input,
     }
 
 }
+} // namespace
+
 #endif

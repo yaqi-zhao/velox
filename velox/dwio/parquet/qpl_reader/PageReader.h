@@ -169,6 +169,7 @@ class PageReader {
   void prepareDataPageV1(const thrift::PageHeader& pageHeader, int64_t row);
   void prepareDataPageV2(const thrift::PageHeader& pageHeader, int64_t row);
   void prepareDictionary(const thrift::PageHeader& pageHeader);
+  void prepareDictionary_1(const thrift::PageHeader& pageHeader);
   void makeDecoder(thrift::PageHeader pageHeader);
 
   // For a non-top level leaf, reads the defs and sets 'leafNulls_' and
@@ -250,7 +251,8 @@ class PageReader {
     //   }
     // } else {
       if (isDictionary()) {
-        auto dictVisitor = visitor.toQplDictionaryColumnVisitor();
+        // auto dictVisitor = visitor.toQplDictionaryColumnVisitor();
+        auto dictVisitor = visitor.toDictionaryColumnVisitor();
         dictionaryIdDecoder_->readWithVisitor<false>(nullptr, dictVisitor);
       } else {
         directDecoder_->readWithVisitor<false>(

@@ -41,6 +41,7 @@ class QplDictionaryColumnVisitor
             rows,
             values),
         type_(nullptr),
+        state_(reader->scanState().rawState),
         width_(
             reader->type()->kind() == TypeKind::BIGINT        ? 8
                 : reader->type()->kind() == TypeKind::INTEGER ? 4
@@ -55,6 +56,7 @@ class QplDictionaryColumnVisitor
         this->type_ = type;
         this->dictPageData_ = dictPageData;
     }
+
 
   template <bool hasFilter, bool hasHook, bool scatter>
   void processRun(
@@ -87,7 +89,7 @@ class QplDictionaryColumnVisitor
         uint32_t job_id = 0;
         qpl_job* job = qpl_job_pool.AcquireJob(job_id);
 
-        mask_after_scan.resize(dictPageHeader.dictionary_page_header.num_values / 8, 4);
+        mask_after_scan.resize((dictPageHeader.dictionary_page_header.num_values + 7) / 8, 4);
 
         job->flags   = QPL_FLAG_DECOMPRESS_ENABLE;
         job->op = qpl_op_scan_range;
@@ -128,7 +130,11 @@ class QplDictionaryColumnVisitor
                 break;
         }
         auto status = qpl_execute_job(job);
+        // if (status != QPL_STS_OK) {
+        //     qpl_execute_job(job);
+        // }
         VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
+        // std::cout << "dictionary decompress success" << std::endl;
         numValuesSize = job->total_out;
         qpl_fini_job(qpl_job_pool.GetJobById(job_id));
         qpl_job_pool.ReleaseJob(job_id);
@@ -136,11 +142,58 @@ class QplDictionaryColumnVisitor
         return;
     }
 
+    void decompressDic(const char* FOLLY_NULLABLE input,
+        uint32_t input_len,
+        uint32_t type_size) {
+            dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
+            uint32_t job_id = 0;
+            qpl_job* job = qpl_job_pool.AcquireJob(job_id);
+
+            job->op = qpl_op_decompress;
+            job->next_in_ptr = reinterpret_cast<uint8_t*>(const_cast<char*>(input));
+            job->available_in = input_len;
+            job->next_out_ptr = reinterpret_cast<const uint8_t*>(state_.dictionary.values);
+            job->available_out = state_.dictionary.numValues * type_size;;
+            job->flags = QPL_FLAG_FIRST | QPL_FLAG_LAST;
+
+
+            auto status = qpl_execute_job(job);
+            VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
+            qpl_fini_job(qpl_job_pool.GetJobById(job_id));
+            qpl_job_pool.ReleaseJob(job_id);
+            return;
+    }
+
+  template <bool hasFilter, bool hasHook, bool scatter>
+  void processRun_1(
+      const char* FOLLY_NULLABLE input,
+      facebook::velox::parquet::thrift::PageHeader& dictPageHeader,
+      facebook::velox::parquet::qpl_reader::ParquetTypeWithIdPtr type,
+      const int32_t* scatterRows,
+      std::vector<uint8_t>& mask_after_scan,
+      uint32_t& numValuesSize) {
+        if (!hasFilter) {
+            if (hasHook) {
+                // TODO: ExtractToHook
+                return;
+            }
+            decompressDic(input, dictPageHeader.compressed_page_size, 4);
+            return;
+        }
+
+        decompressDic(input, dictPageHeader.compressed_page_size, 4);
+        // processScan()
+        return;
+    }
+
+
   protected:
     facebook::velox::parquet::thrift::PageHeader dictPageHeader_;
     facebook::velox::parquet::qpl_reader::ParquetTypeWithIdPtr type_;
     const char* FOLLY_NULLABLE dictPageData_{nullptr};
     const uint8_t width_;
+
+    RawScanState state_;
 
 
 };

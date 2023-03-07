@@ -75,15 +75,22 @@ add_test(
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(
   velox_dwio_parquet_structure_decoder_test velox_dwio_native_parquet_reader
-  velox_dwio_qpl_parquet_reader
   ${VELOX_LINK_LIBS} ${TEST_LINK_LIBS})
 
 add_executable(velox_dwio_parquet_structure_decoder_benchmark
                NestedStructureDecoderBenchmark.cpp)
 target_link_libraries(
   velox_dwio_parquet_structure_decoder_benchmark
-  velox_dwio_native_parquet_reader velox_dwio_qpl_parquet_reader ${FOLLY_WITH_DEPENDENCIES}
+  velox_dwio_native_parquet_reader ${FOLLY_WITH_DEPENDENCIES}
   ${FOLLY_BENCHMARK})
+
+if(VELOX_ENABLE_QPL)
+  target_link_libraries(
+    velox_dwio_parquet_structure_decoder_test    velox_dwio_qpl_parquet_reader)
+  target_link_libraries(
+    velox_dwio_parquet_structure_decoder_benchmark
+    velox_dwio_qpl_parquet_reader)    
+endif()  
 
 if(${VELOX_ENABLE_ARROW})
 
@@ -93,7 +100,12 @@ if(${VELOX_ENABLE_ARROW})
     COMMAND velox_dwio_parquet_rlebp_decoder_test
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   target_link_libraries(
-    velox_dwio_parquet_rlebp_decoder_test velox_dwio_native_parquet_reader velox_dwio_qpl_parquet_reader
+    velox_dwio_parquet_rlebp_decoder_test velox_dwio_native_parquet_reader
     arrow ${VELOX_LINK_LIBS} ${TEST_LINK_LIBS})
+
+  if(VELOX_ENABLE_QPL)
+    target_link_libraries(
+    velox_dwio_parquet_rlebp_decoder_test  velox_dwio_qpl_parquet_reader)
+  endif()
 
 endif()

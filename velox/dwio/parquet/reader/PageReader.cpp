@@ -218,6 +218,7 @@ const char* FOLLY_NONNULL PageReader::uncompressData(
           stream.msg ? stream.msg : "");
       return uncompressedData_->as<char>();
     }
+#ifdef VELOX_ENABLE_QPL      
     case thrift::CompressionCodec::QPL:{
       dwio::common::ensureCapacity<char>(
         uncompressedData_, uncompressedSize, &pool_);
@@ -236,9 +237,8 @@ const char* FOLLY_NONNULL PageReader::uncompressData(
         delete qpl_dec;
         return uncompressedData_->as<char>();
       }
-
-      
     }
+#endif    
     default:
       VELOX_FAIL("Unsupported Parquet compression type '{}'", codec_);
   }

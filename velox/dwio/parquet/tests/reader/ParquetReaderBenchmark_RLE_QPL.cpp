@@ -20,9 +20,7 @@
 #include "velox/dwio/common/tests/utils/DataSetBuilder.h"
 #include "velox/dwio/parquet/RegisterParquetReader.h"
 #include "velox/dwio/parquet/duckdb_reader/ParquetReader.h"
-#ifdef VELOX_ENABLE_QPL  
 #include "velox/dwio/parquet/qpl_reader/ParquetReader.h"
-#endif
 #include "velox/dwio/parquet/reader/ParquetReader.h"
 #include "velox/dwio/parquet/writer/Writer.h"
 
@@ -141,11 +139,9 @@ class ParquetReaderBenchmark {
         reader = std::make_unique<duckdb_reader::ParquetReader>(
             input->getInputStream(), readerOpts);
         break;
-#ifdef VELOX_ENABLE_QPL          
       case ParquetReaderType::QPL:
         reader = std::make_unique<qpl_reader::ParquetReader>(std::move(input), readerOpts);
-        break;
-#endif        
+        break;        
       default:
         VELOX_UNSUPPORTED("Only native or DuckDB Parquet reader is supported");
     }
@@ -241,15 +237,15 @@ class ParquetReaderBenchmark {
     // Filter range is generated from a small sample data of 4096 rows. So the
     // upperBound and lowerBound are introduced to estimate the result size.
     auto resultSize = read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
+    // read(parquetReaderType, rowType, scanSpec, nextSize);
+    // read(parquetReaderType, rowType, scanSpec, nextSize);
+    // read(parquetReaderType, rowType, scanSpec, nextSize);
+    // read(parquetReaderType, rowType, scanSpec, nextSize);
+    // read(parquetReaderType, rowType, scanSpec, nextSize);
+    // read(parquetReaderType, rowType, scanSpec, nextSize);
+    // read(parquetReaderType, rowType, scanSpec, nextSize);
+    // read(parquetReaderType, rowType, scanSpec, nextSize);
+    // read(parquetReaderType, rowType, scanSpec, nextSize);
 
     // auto curTime = system_clock::now();
     // size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -296,7 +292,7 @@ void run(
   ParquetReaderBenchmark benchmark(disableDictionary);
   BIGINT()->toString();
   benchmark.readSingleColumn(
-      ParquetReaderType::NATIVE,
+      ParquetReaderType::QPL,
       columnName,
       type,
       0,
@@ -359,9 +355,8 @@ void run(
       _filter_,                                                           \
       _null_,                                                             \
       10000,                                                               \
-      false);                                                             \
-
-
+      false);                                                             \  
+    
   BENCHMARK_DRAW_LINE();
 
 #define PARQUET_BENCHMARKS_FILTERS(_type_, _name_, _filter_)    \

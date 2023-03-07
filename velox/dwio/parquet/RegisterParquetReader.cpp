@@ -32,10 +32,12 @@ void registerParquetReaderFactory(ParquetReaderType parquetReaderType) {
       dwio::common::registerReaderFactory(
           std::make_shared<ParquetReaderFactory>());
       break;
+#ifdef VELOX_ENABLE_QPL      
     case ParquetReaderType::QPL:
       dwio::common::registerReaderFactory(
           std::make_shared<qpl_reader::ParquetReaderFactory>());
-      break;      
+      break;
+#endif           
     default:
       VELOX_UNSUPPORTED(
           "Velox does not support ParquetReaderType ", parquetReaderType);

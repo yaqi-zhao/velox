@@ -56,7 +56,7 @@ bool QplJobHWPool::AllocateQPLJob() {
   uint32_t job_size = 0;
 
   /// Get size required for saving a single qpl job object
-  qpl_get_job_size(qpl_path_software, &job_size);
+  qpl_get_job_size(qpl_path, &job_size);
   /// Allocate entire buffer for storing all job objects
   hw_jobs_buffer = std::make_unique<uint8_t[]>(job_size * MAX_JOB_NUMBER);
   /// Initialize pool for storing all job object pointers
@@ -64,7 +64,7 @@ bool QplJobHWPool::AllocateQPLJob() {
   for (uint32_t index = 0; index < MAX_JOB_NUMBER; ++index) {
     qpl_job* qpl_job_ptr =
         reinterpret_cast<qpl_job*>(hw_jobs_buffer.get() + index * job_size);
-    if (qpl_init_job(qpl_path_software, qpl_job_ptr) != QPL_STS_OK) {
+    if (qpl_init_job(qpl_path, qpl_job_ptr) != QPL_STS_OK) {
       iaa_job_ready = false;
       VELOX_DCHECK_EQ(
       1,
@@ -99,6 +99,9 @@ qpl_job* QplJobHWPool::AcquireJob(uint32_t& job_id) {
   if (index >= MAX_JOB_NUMBER) {
     return nullptr;
   }
+
+  auto status = qpl_init_job(qpl_path, hw_job_ptr_pool[index]);
+  VELOX_DCHECK_EQ(status, QPL_STS_OK, "QPL job initialization false");
   return hw_job_ptr_pool[index];
 }
 

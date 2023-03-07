@@ -77,6 +77,7 @@ class QplJobHWPool {
   static std::array<qpl_job*, MAX_JOB_NUMBER> hw_job_ptr_pool;
   /// Locks for accessing each job object pointers
   static std::vector<bool> job_ptr_locks;
+  static constexpr qpl_path_t qpl_path = qpl_path_hardware;
   // static std::array<uint32_t, MAX_JOB_NUMBER> job_ptr_locks;
   static bool iaa_job_ready;
   std::mt19937 random_engine;

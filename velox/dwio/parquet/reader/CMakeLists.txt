@@ -11,9 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-include_directories(/home/liuzhuan/qpl/dest/include)
-link_directories(/home/liuzhuan/qpl/dest/lib)
-link_libraries(/home/liuzhuan/qpl/dest/lib/libqpl.a)
+
 add_library(
   velox_dwio_native_parquet_reader
   compression_qpl.cpp
@@ -31,7 +29,6 @@ add_library(
 
 target_link_libraries(
   velox_dwio_native_parquet_reader
-  accel-config
   velox_dwio_parquet_thrift
   velox_type
   velox_dwio_common

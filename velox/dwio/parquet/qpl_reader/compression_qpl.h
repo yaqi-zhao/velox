@@ -4,6 +4,8 @@
 #ifdef VELOX_ENABLE_QPL  
 #include <qpl/qpl.h>
 
+namespace facebook::velox::parquet::qpl_reader {
+
 bool Initjobs(qpl_path_t execute_path);
 class Qplcodec{
 public:
@@ -27,5 +29,7 @@ private:
   int idx_;
   
 };
+
+}
 
 #endif

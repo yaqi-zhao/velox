@@ -176,26 +176,26 @@ class RleBpDataDecoder : public facebook::velox::parquet::RleBpDecoder {
     // using TValues = typename std::remove_reference<decltype(values[0])>::type;
     using TIndex = typename std::make_signed_t<
         typename dwio::common::make_index<TValues>::type>;
-#ifdef VELOX_ENABLE_QPL        
-    if (sizeof(TIndex) == 4) {
-      // std::cout << "TINndex is 4" << std::endl;
-      facebook::velox::dwio::common::unpack_uint<uint32_t>(reinterpret_cast<const uint8_t*&>(super::bufferStart_),
-        super::bufferEnd_ - super::bufferStart_,
-        numRows,
-        bitWidth_,
-        reinterpret_cast<uint32_t*>(values) + numValues, 
-        qpl_job_ids);
-    } else {
-      facebook::velox::dwio::common::unpack(
-          reinterpret_cast<const uint64_t*>(super::bufferStart_),
-          bitOffset_,
-          folly::Range<const int32_t*>(rows + rowIndex, numRows),
-          currentRow,
-          bitWidth_,
-          super::bufferEnd_,
-          reinterpret_cast<TIndex*>(values) + numValues);
-    }
-#else
+// #ifdef VELOX_ENABLE_QPL        
+//     if (sizeof(TIndex) == 4) {
+//       // std::cout << "TINndex is 4" << std::endl;
+//       facebook::velox::dwio::common::unpack_uint<uint32_t>(reinterpret_cast<const uint8_t*&>(super::bufferStart_),
+//         super::bufferEnd_ - super::bufferStart_,
+//         numRows,
+//         bitWidth_,
+//         reinterpret_cast<uint32_t*>(values) + numValues, 
+//         qpl_job_ids);
+//     } else {
+//       facebook::velox::dwio::common::unpack(
+//           reinterpret_cast<const uint64_t*>(super::bufferStart_),
+//           bitOffset_,
+//           folly::Range<const int32_t*>(rows + rowIndex, numRows),
+//           currentRow,
+//           bitWidth_,
+//           super::bufferEnd_,
+//           reinterpret_cast<TIndex*>(values) + numValues);
+//     }
+// #else
     facebook::velox::dwio::common::unpack(
         reinterpret_cast<const uint64_t*>(super::bufferStart_),
         bitOffset_,
@@ -204,7 +204,7 @@ class RleBpDataDecoder : public facebook::velox::parquet::RleBpDecoder {
         bitWidth_,
         super::bufferEnd_,
         reinterpret_cast<TIndex*>(values) + numValues);
-#endif
+// #endif
 
     super::bufferStart_ += numBits >> 3;
     bitOffset_ = numBits & 7;
@@ -326,7 +326,8 @@ template <bool hasFilter, bool hasHook, bool scatter, typename Visitor>
     auto values = visitor.rawValues(numRows);
     auto filterHits = hasFilter ? visitor.outputRows(numRows) : nullptr;
     int32_t numValues = 0;
-#ifdef VELOX_ENABLE_QPL
+#ifdef VELOX_QPL_ASYNC_MODE
+// #ifdef VELOX_ENABLE_QPL
     using TValues = typename std::remove_reference<decltype(values[0])>::type;
     using TIndex = typename std::make_signed_t<typename dwio::common::make_index<TValues>::type>;
     if (sizeof(TIndex) == sizeof(uint32_t) && bitWidth_ > 1) {
@@ -378,7 +379,7 @@ template <bool hasFilter, bool hasHook, bool scatter, typename Visitor>
           size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
                 curTime - startTime).count();
           
-          printf("Rle decoder_%d    time:%dus\n", int(numAllRows),  (int)(msElapsed));   
+          // printf("Rle decoder_%d    time:%dus\n", int(numAllRows),  (int)(msElapsed));   
           return;
         }
         if (remainingValues_) {
