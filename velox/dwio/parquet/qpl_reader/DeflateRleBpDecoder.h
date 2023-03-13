@@ -45,7 +45,7 @@ class DeflateRleBpDecoder {
           type_(type) {}
 
   template <bool hasNulls, typename Visitor>
-  void readWithVisitor_0(const uint64_t* FOLLY_NULLABLE nulls, Visitor visitor) {
+  void readWithVisitor(const uint64_t* FOLLY_NULLABLE nulls, Visitor visitor) {
     if (useQplPath<hasNulls>(visitor)) {
         auto dictVisitor = visitor.toQplDictionaryColumnVisitor();
         dictVisitor.setPageData(dictPageData_, dictPageHeader_, type_);
@@ -65,7 +65,7 @@ class DeflateRleBpDecoder {
   }
 
     template <bool hasNulls, typename Visitor>
-  void readWithVisitor(const uint64_t* FOLLY_NULLABLE nulls, Visitor visitor) {
+  void readWithVisitor_0(const uint64_t* FOLLY_NULLABLE nulls, Visitor visitor) {
     if (useQplPath<hasNulls>(visitor)) {
         constexpr bool hasFilter =
             !std::is_same_v<typename Visitor::FilterType, common::AlwaysTrue>;
@@ -119,24 +119,76 @@ class DeflateRleBpDecoder {
     return true;
   }
 
+  template <bool hasFilter, bool hasHook, bool scatter,  typename ColumnVisitor>
+  void bulkScan(folly::Range<const int32_t*> nonNullRows,
+      const int32_t* FOLLY_NULLABLE scatterRows,
+      ColumnVisitor& visitor) {
+      auto& reader = visitor.reader();
+      uint32_t dict_index;
+      uint32_t filter_val;
+
+      // Step1. uncompress + filter dictionary to get filter mask
+      std::vector<uint8_t> dict_mask_vector;
+      uint32_t numValuesSize = 0;
+      visitor.template processRun<hasFilter, hasHook, scatter>(
+      dictPageData_,
+      dictPageHeader_,
+      type_,
+      scatterRows,
+      dict_index,
+      filter_val);
+
+      // Step2. uncompress + scan with mask data pate to get output vector
+      auto numRows = visitor.numRows();
+      auto numAllRows = visitor.numRows();
+      auto values = visitor.rawValues(numRows);
+      using TValues = typename std::remove_reference<decltype(values[0])>::type;
+      using TIndex = typename std::make_signed_t<typename dwio::common::make_index<TValues>::type>;
+      const auto *indices = reinterpret_cast<const TValues *>(dict_mask_vector.data());
+      
+      dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
+      uint32_t job_id = 0;
+      qpl_job* job = qpl_job_pool.AcquireJob(job_id);
+
+      job->op=qpl_op_scan_eq;
+      // job->op=qpl_op_extract;
+      job->next_in_ptr=reinterpret_cast<uint8_t*>(const_cast<char*>(pageData_));
+      job->available_in=pageHeader_.compressed_page_size;
+      job->parser = qpl_p_parquet_rle;
+      job->out_bit_width = qpl_ow_32;
+      job->next_out_ptr = reinterpret_cast<uint8_t*>(values);
+      job->available_out = static_cast<uint32_t>(numRows * sizeof(TIndex)); 
+      job->num_input_elements = numAllRows;
+      job->flags   = QPL_FLAG_DECOMPRESS_ENABLE;
+
+      job->param_low = dict_index;
+
+      // job->param_high = numAllRows;
+
+      // job->next_src2_ptr      = dict_mask_vector.data();
+      // job->available_src2     = numValuesSize;
+      // job->src2_bit_width     = 1;
+
+
+      auto status = qpl_execute_job(job);
+      VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
+      const auto numValues = job->total_out / 4;
+
+      std::fill(values, values + numValues, filter_val);
+      // std::cout << "deflate rle success" << std::endl;
+      qpl_fini_job(qpl_job_pool.GetJobById(job_id));
+      qpl_job_pool.ReleaseJob(job_id);
+      visitor.setNumValues(hasFilter ? numValues : numAllRows);
+
+  }
+
   // template <bool hasFilter, bool hasHook, bool scatter,  typename ColumnVisitor>
   // void bulkScan(folly::Range<const int32_t*> nonNullRows,
   //     const int32_t* FOLLY_NULLABLE scatterRows,
   //     ColumnVisitor& visitor) {
   //     auto& reader = visitor.reader();
 
-  //     // Step1. uncompress + filter dictionary to get filter mask
-  //     std::vector<uint8_t> dict_mask_vector;
-  //     uint32_t numValuesSize = 0;
-  //     visitor.template processRun<hasFilter, hasHook, scatter>(
-  //     dictPageData_,
-  //     dictPageHeader_,
-  //     type_,
-  //     scatterRows,
-  //     dict_mask_vector,
-  //     numValuesSize);
-
-  //     // Step2. uncompress + scan with mask data pate to get output vector
+  //     // Step1. uncompress + scan with mask data pate to get output vector
   //     auto numRows = visitor.numRows();
   //     auto numAllRows = visitor.numRows();
   //     auto values = visitor.rawValues(numRows);
@@ -145,22 +197,21 @@ class DeflateRleBpDecoder {
       
   //     dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
   //     uint32_t job_id = 0;
-  //     qpl_job* job = qpl_job_pool.AcquireJob(job_id);
-  //     job->op = qpl_op_extract;
-  //     // job->op = qpl_op_select;
-  //     job->flags   = QPL_FLAG_DECOMPRESS_ENABLE;
-  //     job->parser = qpl_p_parquet_rle;
 
-  //     job->next_in_ptr = reinterpret_cast<uint8_t*>(const_cast<char*>(pageData_));
-  //     job->available_in = pageHeader_.compressed_page_size;
+  //     qpl_job* job = qpl_job_pool.AcquireJob(job_id);
+
+  //     job->op=qpl_op_extract;
+  //     job->next_in_ptr=reinterpret_cast<uint8_t*>(const_cast<char*>(pageData_));
+  //     job->available_in=pageHeader_.compressed_page_size;
+  //     // job->flags=QPL_FLAG_FIRST | QPL_FLAG_LAST;
+  //     job->parser = qpl_p_parquet_rle;
+  //     job->param_low = 0;
+  //     job->param_high = numAllRows;
+  //     job->out_bit_width = qpl_ow_32;
   //     job->next_out_ptr = reinterpret_cast<uint8_t*>(values);
   //     job->available_out = static_cast<uint32_t>(numRows * sizeof(TIndex)); 
   //     job->num_input_elements = numAllRows;
-  //     job->out_bit_width = qpl_ow_32;
-
-  //     // job->next_src2_ptr      = dict_mask_vector.data();
-  //     // job->available_src2     = numValuesSize;
-  //     // job->src2_bit_width     = 1;
+  //     job->flags   = QPL_FLAG_DECOMPRESS_ENABLE;
 
   //     auto status = qpl_execute_job(job);
   //     VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
@@ -168,61 +219,22 @@ class DeflateRleBpDecoder {
   //     qpl_fini_job(qpl_job_pool.GetJobById(job_id));
   //     qpl_job_pool.ReleaseJob(job_id);
 
+  //     // Step 2.  filter dictionary to get output
+  //     int32_t numValues = 0;
+  //     auto filterHits = hasFilter ? visitor.outputRows(numRows) : nullptr;
+  //     visitor.template processRun<hasFilter, hasHook, scatter>(
+  //         values,
+  //         numRows,
+  //         nullptr,
+  //         filterHits,
+  //         values,
+  //         numValues);
+  //     if (visitor.atEnd()) {
+  //       visitor.setNumValues(hasFilter ? numValues : numAllRows);
+  //       return;
+  //     }       
+
   // }
-
-  template <bool hasFilter, bool hasHook, bool scatter,  typename ColumnVisitor>
-  void bulkScan(folly::Range<const int32_t*> nonNullRows,
-      const int32_t* FOLLY_NULLABLE scatterRows,
-      ColumnVisitor& visitor) {
-      auto& reader = visitor.reader();
-
-      // Step1. uncompress + scan with mask data pate to get output vector
-      auto numRows = visitor.numRows();
-      auto numAllRows = visitor.numRows();
-      auto values = visitor.rawValues(numRows);
-      using TValues = typename std::remove_reference<decltype(values[0])>::type;
-      using TIndex = typename std::make_signed_t<typename dwio::common::make_index<TValues>::type>;
-      
-      dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
-      uint32_t job_id = 0;
-
-      qpl_job* job = qpl_job_pool.AcquireJob(job_id);
-
-      job->op=qpl_op_extract;
-      job->next_in_ptr=reinterpret_cast<uint8_t*>(const_cast<char*>(pageData_));
-      job->available_in=pageHeader_.compressed_page_size;
-      // job->flags=QPL_FLAG_FIRST | QPL_FLAG_LAST;
-      job->parser = qpl_p_parquet_rle;
-      job->param_low = 0;
-      job->param_high = numAllRows;
-      job->out_bit_width = qpl_ow_32;
-      job->next_out_ptr = reinterpret_cast<uint8_t*>(values);
-      job->available_out = static_cast<uint32_t>(numRows * sizeof(TIndex)); 
-      job->num_input_elements = numAllRows;
-      job->flags   = QPL_FLAG_DECOMPRESS_ENABLE;
-
-      auto status = qpl_execute_job(job);
-      VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
-      // std::cout << "deflate rle success" << std::endl;
-      qpl_fini_job(qpl_job_pool.GetJobById(job_id));
-      qpl_job_pool.ReleaseJob(job_id);
-
-      // Step 2.  filter dictionary to get output
-      int32_t numValues = 0;
-      auto filterHits = hasFilter ? visitor.outputRows(numRows) : nullptr;
-      visitor.template processRun<hasFilter, hasHook, scatter>(
-          values,
-          numRows,
-          nullptr,
-          filterHits,
-          values,
-          numValues);
-      if (visitor.atEnd()) {
-        visitor.setNumValues(hasFilter ? numValues : numAllRows);
-        return;
-      }       
-
-  }
 
 
   // template <bool hasFilter, bool hasHook, bool scatter,  typename ColumnVisitor>

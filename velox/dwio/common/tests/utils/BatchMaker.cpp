@@ -56,7 +56,8 @@ VectorPtr createScalar(
     auto notNull = isNotNull(gen, i, isNullAt);
     bits::setNull(nullsPtr, i, !notNull);
     if (notNull) {
-      valuesPtr[i] = val();
+      auto tmp = val();
+      valuesPtr[i] = tmp;
     } else {
       nullCount++;
     }
@@ -116,10 +117,11 @@ VectorPtr BatchMaker::createVector<TypeKind::SMALLINT>(
   return createScalar<int16_t>(
       size,
       gen,
-      [&gen]() { return static_cast<int16_t>(Random::rand32(gen)); },
+      [&gen]() { return static_cast<uint16_t>(Random::rand32(0, 100, gen)); },
       pool,
       isNullAt);
 }
+
 
 template <>
 VectorPtr BatchMaker::createVector<TypeKind::INTEGER>(

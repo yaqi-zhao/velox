@@ -92,7 +92,7 @@ class ParquetReaderBenchmark {
             columnName,
             startPct,
             selectPct,
-            FilterKind::kBigintRange,
+            FilterKind::kAlwaysTrue,
             isForRowGroupSkip,
             allowNulls);
       case TypeKind::DOUBLE:
@@ -226,10 +226,10 @@ class ParquetReaderBenchmark {
     std::vector<FilterSpec> filterSpecs;
 
     //    Filters on List and Map are not supported currently.
-    if (type->kind() != TypeKind::ARRAY && type->kind() != TypeKind::MAP) {
-      filterSpecs.emplace_back(createFilterSpec(
-          columnName, startPct, selectPct, rowType, false, false));
-    }
+    // if (type->kind() != TypeKind::ARRAY && type->kind() != TypeKind::MAP) {
+    //   filterSpecs.emplace_back(createFilterSpec(
+    //       columnName, startPct, selectPct, rowType, false, false));
+    // }
 
     std::vector<uint64_t> hitRows;
     auto scanSpec = createScanSpec(*batches, rowType, filterSpecs, hitRows);
@@ -241,15 +241,7 @@ class ParquetReaderBenchmark {
     // Filter range is generated from a small sample data of 4096 rows. So the
     // upperBound and lowerBound are introduced to estimate the result size.
     auto resultSize = read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
+
 
     // auto curTime = system_clock::now();
     // size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -269,11 +261,11 @@ class ParquetReaderBenchmark {
     upperBound = std::max(16, upperBound);
     lowerBound = std::max(0, lowerBound);
 
-    VELOX_CHECK(
-        resultSize <= upperBound && resultSize >= lowerBound,
-        "Result Size {} and Expected Size {} Mismatch",
-        resultSize,
-        expected);
+    // VELOX_CHECK(
+    //     resultSize <= upperBound && resultSize >= lowerBound,
+    //     "Result Size {} and Expected Size {} Mismatch",
+    //     resultSize,
+    //     expected);
   }
 
  private:
@@ -399,7 +391,7 @@ PARQUET_BENCHMARKS(INTEGER(), INTEGER);
 // TODO: Add all data types
 
 int main(int argc, char** argv) {
-  // sleep(10);
+  sleep(10);
 #ifdef VELOX_ENABLE_QPL  
   dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
 #endif  

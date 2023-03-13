@@ -18,6 +18,7 @@
 
 #include <folly/Random.h>
 #include <memory>
+#include <iostream>
 
 #include "velox/common/memory/Memory.h"
 #include "velox/dwio/common/ScanSpec.h"
@@ -118,6 +119,8 @@ class ColumnStats : public AbstractColumnStats {
       std::vector<uint64_t>& rows) override {
     int32_t previousBatch = -1;
     SimpleVector<T>* values = nullptr;
+    T tmp;
+    T tmp1;
     for (auto row : rows) {
       auto batch = batchNumber(row);
       if (batch != previousBatch) {
@@ -129,6 +132,8 @@ class ColumnStats : public AbstractColumnStats {
       }
 
       addSample(values, batchRow(row));
+      tmp = values_[values_.size() - 1];
+      tmp1 = values_[0];
     }
     if constexpr (!std::is_same_v<T, ComplexType>) {
       std::sort(values_.begin(), values_.end());
@@ -227,6 +232,8 @@ class ColumnStats : public AbstractColumnStats {
     uniques_[hash]++;
     ++numDistinct_;
     values_.push_back(value);
+    auto tmp = values_[values_.size() - 1];
+    return;
   }
 
   int32_t findIndex(float pct) {
@@ -251,6 +258,7 @@ class ColumnStats : public AbstractColumnStats {
     if (indexOut) {
       *indexOut = boundedIndex;
     }
+    auto tmp = values_[boundedIndex];
     return values_[boundedIndex];
   }
 
@@ -268,12 +276,15 @@ class ColumnStats : public AbstractColumnStats {
     }
     int32_t lowerIndex;
     int32_t upperIndex;
+    T tmp = values_[0];
     T lower = valueAtPct(filterSpec.startPct, &lowerIndex);
     T upper =
         valueAtPct(filterSpec.startPct + filterSpec.selectPct, &upperIndex);
     if (!filterSpec.allowNulls_) {
+      // return std::make_unique<velox::common::BigintRange>(
+      //     getIntegerValue(lower), getIntegerValue(upper), false);
       return std::make_unique<velox::common::BigintRange>(
-          getIntegerValue(lower), getIntegerValue(upper), false);
+          1, 1, false);          
     }
     if (upperIndex - lowerIndex < 1000 && ++counter_ % 10 <= 3) {
       std::vector<int64_t> in;

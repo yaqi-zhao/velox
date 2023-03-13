@@ -86,7 +86,7 @@ enum class TypeKind : int8_t {
   UNKNOWN = 33,
   FUNCTION = 34,
   OPAQUE = 35,
-  INVALID = 36
+  INVALID = 37
 };
 
 /// Returns the typekind represented by the `name`. Throws if no match found.

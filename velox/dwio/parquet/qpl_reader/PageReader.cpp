@@ -410,7 +410,7 @@ void PageReader::prepareDataPageV2(const PageHeader& pageHeader, int64_t row) {
 }
 
 
-void PageReader::prepareDictionary(const PageHeader& pageHeader) {
+void PageReader::prepareDictionary_1(const PageHeader& pageHeader) {
   dictionary_.numValues = pageHeader.dictionary_page_header.num_values;
   dictionaryEncoding_ = pageHeader.dictionary_page_header.encoding;
   dictionary_.sorted = pageHeader.dictionary_page_header.__isset.is_sorted &&
@@ -550,7 +550,7 @@ void PageReader::prepareDictionary(const PageHeader& pageHeader) {
   }
 }
 
-void PageReader::prepareDictionary_1(const PageHeader& pageHeader) {
+void PageReader::prepareDictionary(const PageHeader& pageHeader) {
   dictionary_.numValues = pageHeader.dictionary_page_header.num_values;
   dictionaryEncoding_ = pageHeader.dictionary_page_header.encoding;
   dictionary_.sorted = pageHeader.dictionary_page_header.__isset.is_sorted &&

@@ -251,8 +251,8 @@ class PageReader {
     //   }
     // } else {
       if (isDictionary()) {
-        // auto dictVisitor = visitor.toQplDictionaryColumnVisitor();
-        auto dictVisitor = visitor.toDictionaryColumnVisitor();
+        auto dictVisitor = visitor.toQplDictionaryColumnVisitor();
+        // auto dictVisitor = visitor.toDictionaryColumnVisitor();
         dictionaryIdDecoder_->readWithVisitor<false>(nullptr, dictVisitor);
       } else {
         directDecoder_->readWithVisitor<false>(

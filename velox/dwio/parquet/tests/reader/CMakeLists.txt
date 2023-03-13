@@ -67,6 +67,30 @@ target_link_libraries(
   ${FOLLY_WITH_DEPENDENCIES}
   ${FOLLY_BENCHMARK})
 
+
+add_executable(velox_parquet_reader_rle_filter_qpl_benchmark ParquetReaderBench_RLE_Filter_QPL.cpp)
+target_link_libraries(
+  velox_parquet_reader_rle_filter_qpl_benchmark
+  velox_dwio_parquet_reader
+  velox_dwio_parquet_writer
+  velox_exec_test_lib
+  velox_exec
+  velox_hive_connector
+  ${FOLLY_WITH_DEPENDENCIES}
+  ${FOLLY_BENCHMARK})
+
+add_executable(velox_parquet_reader_rle_filter_native_benchmark ParquetReaderBench_RLE_Filter_native.cpp)
+target_link_libraries(
+  velox_parquet_reader_rle_filter_native_benchmark
+  velox_dwio_parquet_reader
+  velox_dwio_parquet_writer
+  velox_exec_test_lib
+  velox_exec
+  velox_hive_connector
+  ${FOLLY_WITH_DEPENDENCIES}
+  ${FOLLY_BENCHMARK})
+
+
 add_executable(velox_dwio_parquet_structure_decoder_test
                NestedStructureDecoderTest.cpp)
 add_test(

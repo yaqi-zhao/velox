@@ -140,7 +140,7 @@ class DictionaryColumnVisitor;
 template <typename TFilter, typename ExtractValues, bool isDense>
 class StringDictionaryColumnVisitor;
 
-template <typename TFilter, typename ExtractValues, bool isDense>
+template <typename T, typename TFilter, typename ExtractValues, bool isDense>
 class QplDictionaryColumnVisitor;
 
 
@@ -456,7 +456,7 @@ class ColumnVisitor {
   StringDictionaryColumnVisitor<TFilter, ExtractValues, isDense>
   toStringDictionaryColumnVisitor();
 
-  QplDictionaryColumnVisitor<TFilter, ExtractValues, isDense>
+  QplDictionaryColumnVisitor<T, TFilter, ExtractValues, isDense>
   toQplDictionaryColumnVisitor();
 
   // Use for replacing *coall rows with non-null rows for fast path with
@@ -1101,9 +1101,9 @@ ColumnVisitor<T, TFilter, ExtractValues, isDense>::
 }
 
 template <typename T, typename TFilter, typename ExtractValues, bool isDense>
-QplDictionaryColumnVisitor<TFilter, ExtractValues, isDense>
+QplDictionaryColumnVisitor<T, TFilter, ExtractValues, isDense>
 ColumnVisitor<T, TFilter, ExtractValues, isDense>::toQplDictionaryColumnVisitor() {
-    auto result = QplDictionaryColumnVisitor<TFilter, ExtractValues, isDense>(
+    auto result = QplDictionaryColumnVisitor<T, TFilter, ExtractValues, isDense>(
         filter_, reader_, RowSet(rows_ + rowIndex_, numRows_), values_);
     // result.numValuesBias_ = numValuesBias_;
     return result;
