@@ -86,11 +86,7 @@ if(VELOX_ENABLE_ARROW)
 #  add_executable(velox_dwio_common_bitpack_decoder_benchmark_16bit
 #                 BitPackDecoderBenchmark_16.cpp)
 #  add_executable(velox_dwio_common_bitpack_decoder_benchmark_32bit
-#                 BitPackDecoderBenchmark_32.cpp)
-  add_executable(velox_bitpack_decoder_benchmark_32bit_SO
-                 BitDecoderBen_32_sharedOut.cpp)   
-  add_executable(velox_bitpack_decoder_benchmark_32bit_IS
-                 BitDecoderBen_32_input_scale.cpp)                                     
+#                 BitPackDecoderBenchmark_32.cpp)                                 
 #  add_executable(velox_bitpack_decoder_benchmark_32bit_for_shell
 #                 BitPackDecoderBenchmark_32_for_shell.cpp)                                
 #  target_link_libraries(
@@ -104,13 +100,7 @@ if(VELOX_ENABLE_ARROW)
 #    ${FOLLY} ${FOLLY_BENCHMARK})
 #  target_link_libraries(
 #    velox_dwio_common_bitpack_decoder_benchmark_32bit velox_dwio_common arrow duckdb
-#    ${FOLLY} ${FOLLY_BENCHMARK})
-  target_link_libraries(
-    velox_bitpack_decoder_benchmark_32bit_SO velox_dwio_common arrow duckdb
-    ${FOLLY} ${FOLLY_BENCHMARK})    
-  target_link_libraries(
-    velox_bitpack_decoder_benchmark_32bit_IS velox_dwio_common arrow duckdb
-    ${FOLLY} ${FOLLY_BENCHMARK})     
+#    ${FOLLY} ${FOLLY_BENCHMARK})        
 #  target_link_libraries(
 #    velox_bitpack_decoder_benchmark_32bit_for_shell velox_dwio_common arrow duckdb
 #    ${FOLLY} ${FOLLY_BENCHMARK})    

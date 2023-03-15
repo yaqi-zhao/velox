@@ -110,14 +110,14 @@ class ParquetReaderBenchmark {
   }
 
   std::shared_ptr<ScanSpec> createScanSpec(
-      const std::vector<RowVectorPtr>& batches,
       RowTypePtr& rowType,
       const std::vector<FilterSpec>& filterSpecs,
       std::vector<uint64_t>& hitRows) {
     std::unique_ptr<FilterGenerator> filterGenerator =
         std::make_unique<FilterGenerator>(rowType, 0);
-    auto filters =
-        filterGenerator->makeSubfieldFilters(filterSpecs, batches, hitRows);
+    // auto filters =
+    //     filterGenerator->makeSubfieldFilters(filterSpecs, batches, hitRows);
+    SubfieldFilters filters;
     auto scanSpec = filterGenerator->makeScanSpec(std::move(filters));
     return scanSpec;
   }
@@ -217,22 +217,22 @@ class ParquetReaderBenchmark {
     folly::BenchmarkSuspender suspender;
 
     auto rowType = ROW({columnName}, {type});
-    auto batches =
-        dataSetBuilder_->makeDataset(rowType, kNumBatches, kNumRowsPerBatch)
-            .withRowGroupSpecificData(kNumRowsPerRowGroup)
-            .withNullsForField(Subfield(columnName), nullsRateX100)
-            .build();
+    // auto batches =
+    //     dataSetBuilder_->makeDataset(rowType, kNumBatches, kNumRowsPerBatch)
+    //         .withRowGroupSpecificData(kNumRowsPerRowGroup)
+    //         .withNullsForField(Subfield(columnName), nullsRateX100)
+    //         .build();
     // writeToFile(*batches, true);
     std::vector<FilterSpec> filterSpecs;
 
     //    Filters on List and Map are not supported currently.
-    if (type->kind() != TypeKind::ARRAY && type->kind() != TypeKind::MAP) {
-      filterSpecs.emplace_back(createFilterSpec(
-          columnName, startPct, selectPct, rowType, false, false));
-    }
+    // if (type->kind() != TypeKind::ARRAY && type->kind() != TypeKind::MAP) {
+    //   filterSpecs.emplace_back(createFilterSpec(
+    //       columnName, startPct, selectPct, rowType, false, false));
+    // }
 
     std::vector<uint64_t> hitRows;
-    auto scanSpec = createScanSpec(*batches, rowType, filterSpecs, hitRows);
+    auto scanSpec = createScanSpec(rowType, filterSpecs, hitRows);
     // auto scanSpec = nullptr;
 
     suspender.dismiss();
@@ -241,15 +241,9 @@ class ParquetReaderBenchmark {
     // Filter range is generated from a small sample data of 4096 rows. So the
     // upperBound and lowerBound are introduced to estimate the result size.
     auto resultSize = read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
+    for (int i = 0; i < 10; i++) {
+      resultSize = read(parquetReaderType, rowType, scanSpec, nextSize);
+    }
 
     // auto curTime = system_clock::now();
     // size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -270,10 +264,10 @@ class ParquetReaderBenchmark {
     lowerBound = std::max(0, lowerBound);
 
     VELOX_CHECK(
-        resultSize <= upperBound && resultSize >= lowerBound,
+        resultSize == (kNumRowsPerBatch * kNumBatches),
         "Result Size {} and Expected Size {} Mismatch",
         resultSize,
-        expected);
+        kNumRowsPerBatch * kNumBatches);
   }
 
  private:
@@ -400,9 +394,9 @@ PARQUET_BENCHMARKS(INTEGER(), INTEGER);
 
 int main(int argc, char** argv) {
   // sleep(10);
-#ifdef VELOX_ENABLE_QPL  
-  dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
-#endif  
+// #ifdef VELOX_ENABLE_QPL  
+//   dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
+// #endif  
   folly::init(&argc, &argv);
   folly::runBenchmarks();
   return 0;

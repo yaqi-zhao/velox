@@ -18,6 +18,16 @@
 #include "velox/dwio/common/QplJobPool.h"
 #include "velox/common/base/Exceptions.h"
 
+// #if defined(linux)
+// #include <x86intrin.h>
+
+// #else
+// #include <intrin.h>
+// #include <emmintrin.h>
+// #include <immintrin.h>
+// #endif
+
+
 #ifdef VELOX_ENABLE_QPL
 
 // namespace facebook {
@@ -74,6 +84,7 @@ bool QplJobHWPool::AllocateQPLJob() {
           "is properly set up!");
         return false;
     }
+    // _tpause(1, __rdtsc() + 1000);
     hw_job_ptr_pool[index] = qpl_job_ptr;
     job_ptr_locks[index] = false;
   }
@@ -100,8 +111,8 @@ qpl_job* QplJobHWPool::AcquireJob(uint32_t& job_id) {
     return nullptr;
   }
 
-  auto status = qpl_init_job(qpl_path, hw_job_ptr_pool[index]);
-  VELOX_DCHECK_EQ(status, QPL_STS_OK, "QPL job initialization false");
+  // auto status = qpl_init_job(qpl_path, hw_job_ptr_pool[index]);
+  // VELOX_DCHECK_EQ(status, QPL_STS_OK, "QPL job initialization false");
   return hw_job_ptr_pool[index];
 }
 
