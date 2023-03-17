@@ -32,6 +32,9 @@
 #include "velox/functions/prestosql/aggregates/RegisterAggregateFunctions.h"
 #include "velox/functions/prestosql/registration/RegistrationFunctions.h"
 #include "velox/parse/TypeResolver.h"
+// #include "velox/dwio/parquet/qpl_reader/PageReader.h"
+
+#include <sys/time.h>
 
 using namespace facebook::velox;
 using namespace facebook::velox::exec;
@@ -134,9 +137,9 @@ class TpchBenchmark {
     parse::registerTypeResolver();
     filesystems::registerLocalFileSystem();
     if (FLAGS_use_native_parquet_reader) {
-      parquet::registerParquetReaderFactory(parquet::ParquetReaderType::NATIVE);
+      facebook::velox::parquet::registerParquetReaderFactory(parquet::ParquetReaderType::NATIVE);
     } else {
-      parquet::registerParquetReaderFactory(parquet::ParquetReaderType::DUCKDB);
+      facebook::velox::parquet::registerParquetReaderFactory(parquet::ParquetReaderType::QPL);
     }
     dwrf::registerDwrfReaderFactory();
     ioExecutor_ = std::make_unique<folly::IOThreadPoolExecutor>(8);
@@ -301,7 +304,16 @@ int main(int argc, char** argv) {
   if (FLAGS_run_query_verbose == -1) {
     folly::runBenchmarks();
   } else {
-    const auto queryPlan = queryBuilder->getQueryPlan(FLAGS_run_query_verbose);
+    struct timeval start, end;
+    
+    int queries[22]={1,3,5,6,7,8,9,10,12,13,14,15,16,18,19,22};
+    for(int j=0;j<16;j++){
+      gettimeofday(&start, NULL);
+    for(int i=0;i<10;i++){
+      int query_bose=queries[j];
+
+    //const auto queryPlan = queryBuilder->getQueryPlan(FLAGS_run_query_verbose);
+    const auto queryPlan = queryBuilder->getQueryPlan(query_bose);
     const auto [cursor, actualResults] = benchmark.run(queryPlan);
     if (!cursor) {
       LOG(ERROR) << "Query terminated with error. Exiting";
@@ -314,7 +326,8 @@ int main(int argc, char** argv) {
       std::cout << std::endl;
     }
     const auto stats = task->taskStats();
-    std::cout << fmt::format(
+
+    /* std::cout << fmt::format(
                      "Execution time: {}",
                      succinctMillis(
                          stats.executionEndTimeMs - stats.executionStartTimeMs))
@@ -326,6 +339,12 @@ int main(int argc, char** argv) {
               << std::endl;
     std::cout << printPlanWithStats(
                      *queryPlan.plan, stats, FLAGS_include_custom_stats)
-              << std::endl;
+              << std::endl; */
+  }
+  gettimeofday(&end, NULL);
+   printf("%d Time taken to count to 10^5 is : %ld micro seconds\n",queries[j],
+    ((end.tv_sec * 1000000 + end.tv_usec) -
+    (start.tv_sec * 1000000 + start.tv_usec))/1000000);
+    }
   }
 }
