@@ -13,9 +13,9 @@
 # limitations under the License.
 
 add_library(
-  velox_dwio_native_parquet_reader
-  compression_qpl.cpp
+  velox_dwio_qpl_parquet_reader
   NestedStructureDecoder.cpp
+  compression_qpl.cpp
   ParquetReader.cpp
   ParquetTypeWithId.cpp
   PageReader.cpp
@@ -28,28 +28,27 @@ add_library(
   StringColumnReader.cpp)
 
 set_source_files_properties(
-  compression_qpl.cpp
-  NestedStructureDecoder.cpp
-  ParquetReader.cpp
-  ParquetTypeWithId.cpp
-  PageReader.cpp
-  ParquetColumnReader.cpp
-  ParquetData.cpp
-  RepeatedColumnReader.cpp
-  RleBpDecoder.cpp
-  Statistics.cpp
-  StructColumnReader.cpp
-  StringColumnReader.cpp
-    PROPERTIES COMPILE_FLAGS "-mwaitpkg")
+        DeflateRleBpDecoder.h
+        PROPERTIES COMPILE_FLAGS "-mwaitpkg")
+
+set_source_files_properties(
+        PageReader.h
+        PageReader.cpp
+        ParquetData.cpp
+        ParquetReader.cpp
+        ParquetColumnReader.cpp
+        RepeatedColumnReader.cpp
+        StringColumnReader.cpp
+        StructColumnReader.cpp
+        PROPERTIES COMPILE_FLAGS "-mwaitpkg")
+
 
 target_link_libraries(
-  velox_dwio_native_parquet_reader
+  velox_dwio_qpl_parquet_reader
   velox_dwio_parquet_thrift
   velox_type
   velox_dwio_common
   arrow
-  fmt::fmt
   parquet
-  Snappy::snappy
   thrift
-  zstd::zstd)
+  ${FMT})
