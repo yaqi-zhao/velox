@@ -54,6 +54,8 @@ class PageReader {
   /// Advances 'numRows' top level rows.
   void skip(int64_t numRows);
 
+  void waitQplJob(uint32_t job_id);
+
   /// Decodes repdefs for 'numTopLevelRows'. Use getLengthsAndNulls()
   /// to access the lengths and nulls for the different nesting
   /// levels.
@@ -169,7 +171,9 @@ class PageReader {
   void prepareDataPageV1(const thrift::PageHeader& pageHeader, int64_t row);
   void prepareDataPageV2(const thrift::PageHeader& pageHeader, int64_t row);
   void prepareDictionary(const thrift::PageHeader& pageHeader);
+  void prepareDict(const thrift::PageHeader& pageHeader);
   void prepareDictionary_1(const thrift::PageHeader& pageHeader);
+  void prepareDictionary_2(const thrift::PageHeader& pageHeader);
   void makeDecoder(thrift::PageHeader pageHeader);
 
   // For a non-top level leaf, reads the defs and sets 'leafNulls_' and
@@ -233,7 +237,7 @@ class PageReader {
       typename std::enable_if<
           !std::is_same_v<typename Visitor::DataType, folly::StringPiece>,
           int>::type = 0>
-  void callDecoder(
+  uint32_t callDecoder(
       const uint64_t* FOLLY_NULLABLE nulls,
       bool& nullsFromFastPath,
       Visitor visitor) {
@@ -253,12 +257,34 @@ class PageReader {
       if (isDictionary()) {
         // auto dictVisitor = visitor.toQplDictionaryColumnVisitor();
         auto dictVisitor = visitor.toDictionaryColumnVisitor();
-        dictionaryIdDecoder_->readWithVisitor<false>(nullptr, dictVisitor);
+        return dictionaryIdDecoder_->decodeWithVisitor<false>(nullptr, dictVisitor);
+        // dictionaryIdDecoder_->readWithVisitor<false>(nullptr, dictVisitor);
       } else {
         directDecoder_->readWithVisitor<false>(
             nulls, visitor, !this->type_->type->isShortDecimal());
       }
+      return 0;
     // }
+  }
+
+  template <
+      typename Visitor,
+      typename std::enable_if<
+          !std::is_same_v<typename Visitor::DataType, folly::StringPiece>,
+          int>::type = 0>
+  void callFilter(
+      const uint64_t* FOLLY_NULLABLE nulls,
+      bool& nullsFromFastPath,
+      Visitor visitor) {
+      if (isDictionary()) {
+        // auto dictVisitor = visitor.toQplDictionaryColumnVisitor();
+        auto dictVisitor = visitor.toDictionaryColumnVisitor();
+        dictionaryIdDecoder_->filterWithVisitor<false>(nullptr, dictVisitor);
+        // dictionaryIdDecoder_->readWithVisitor<false>(nullptr, dictVisitor);
+      } else {
+        directDecoder_->readWithVisitor<false>(
+            nulls, visitor, !this->type_->type->isShortDecimal());
+      }
   }
 
   template <
@@ -266,7 +292,7 @@ class PageReader {
       typename std::enable_if<
           std::is_same_v<typename Visitor::DataType, folly::StringPiece>,
           int>::type = 0>
-  void callDecoder(
+  uint32_t callDecoder(
       const uint64_t* FOLLY_NULLABLE nulls,
       bool& nullsFromFastPath,
       Visitor visitor) {
@@ -288,7 +314,25 @@ class PageReader {
       } else {
         stringDecoder_->readWithVisitor<false>(nulls, visitor);
       }
+      return 0;
     // }
+  }
+
+  template <
+      typename Visitor,
+      typename std::enable_if<
+          std::is_same_v<typename Visitor::DataType, folly::StringPiece>,
+          int>::type = 0>
+  void callFilter(
+      const uint64_t* FOLLY_NULLABLE nulls,
+      bool& nullsFromFastPath,
+      Visitor visitor) {
+      if (isDictionary()) {
+        auto dictVisitor = visitor.toStringDictionaryColumnVisitor();
+        dictionaryIdDecoder_->filterWithVisitor<false>(nullptr, dictVisitor);
+      } else {
+        stringDecoder_->readWithVisitor<false>(nulls, visitor);
+      }
   }
 
   // Returns the number of passed rows/values gathered by
@@ -446,6 +490,7 @@ class PageReader {
   std::unique_ptr<dwio::common::DirectDecoder<true>> directDecoder_;
   std::unique_ptr<DeflateRleBpDecoder> dictionaryIdDecoder_;
   std::unique_ptr<StringDecoder> stringDecoder_;
+  uint32_t dict_qpl_job_id;
   // Add decoders for other encodings here.
 };
 
@@ -469,7 +514,17 @@ void PageReader::readWithVisitor(Visitor& visitor) {
     int32_t numValuesBeforePage = numRowsInReader<hasFilter>(reader);
     visitor.setNumValuesBias(numValuesBeforePage);
     visitor.setRows(pageRows);
-    callDecoder(nulls, nullsFromFastPath, visitor);
+    uint32_t decode_job_id = callDecoder(nulls, nullsFromFastPath, visitor);
+    waitQplJob(dict_qpl_job_id);
+    prepareDict(dictionaryPageHeader_);
+    auto& scanState = reader.scanState();
+    if (scanState.dictionary.values != dictionary_.values) {
+      scanState.dictionary = dictionary_;
+    }
+    scanState.updateRawState();
+
+    waitQplJob(decode_job_id);
+    callFilter(nulls, nullsFromFastPath, visitor);
     if (currentVisitorRow_ < numVisitorRows_ || isMultiPage) {
       if (mayProduceNulls) {
         if (!isMultiPage) {

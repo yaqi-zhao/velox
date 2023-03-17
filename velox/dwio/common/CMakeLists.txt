@@ -53,6 +53,39 @@ add_library(
   TypeUtils.cpp
   TypeWithId.cpp)
 
+
+set_source_files_properties(
+    BitConcatenation.cpp
+    BitPackDecoder.cpp
+    BufferedInput.cpp
+    CachedBufferedInput.cpp
+    CacheInputStream.cpp
+    ColumnSelector.cpp
+    Common.cpp
+    DataSink.cpp
+    DecoderUtil.cpp
+    DirectDecoder.cpp
+    DwioMetricsLog.cpp
+    FlatMapHelper.cpp
+    InputStream.cpp
+    IntDecoder.cpp
+    IoStatistics.cpp
+    MemoryInputStream.cpp
+    MetadataFilter.cpp
+    Options.cpp
+    QplJobPool.cpp
+    Range.cpp
+    ReaderFactory.cpp
+    ScanSpec.cpp
+    ColumnLoader.cpp
+    SelectiveColumnReader.cpp
+    SelectiveRepeatedColumnReader.cpp
+    SelectiveStructColumnReader.cpp
+    SeekableInputStream.cpp
+    TypeUtils.cpp
+    TypeWithId.cpp
+    PROPERTIES COMPILE_FLAGS "-mwaitpkg")
+
 set(QPL_STATIC_LINK_LIBS ${QPL_STATIC_LINK_LIBS})
 if(VELOX_ENABLE_QPL)
   list(APPEND QPL_STATIC_LINK_LIBS qpl::qpl)

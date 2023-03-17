@@ -1004,7 +1004,17 @@ class DictionaryColumnVisitor
           value = input[i];
         }
       } else {
-        value = dict()[reinterpret_cast<const TIndex*>(input)[i]];
+        // value = dict()[reinterpret_cast<const TIndex*>(input)[i]];
+        const T* dict_1 = reinterpret_cast<const T*>(state_.dictionary.values);
+        const TIndex* idx_ptr = reinterpret_cast<const TIndex*>(input);
+        TIndex idx = idx_ptr[i];
+#ifdef VELOX_ENABLE_QPL        
+        while (idx >= state_.dictionary.numValues) {
+          _tpause(1, __rdtsc() + 1000);
+          idx = idx_ptr[i];
+        }
+#endif        
+        value = dict_1[idx];
       }
       if (scatter) {
         values[scatterRows[super::rowIndex_ + i]] = value;

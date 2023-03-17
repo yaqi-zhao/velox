@@ -47,6 +47,7 @@ class QplJobHWPool {
   /// @param job_id QPL job id, used when release QPL job
   /// \return Pointer to the QPL job. If acquire job failed, return nullptr.
   qpl_job* AcquireJob(uint32_t& job_id);
+  qpl_job* AcquireDeflateJob(uint32_t& job_id);
 
   /// \brief Release QPL job by the job_id.
   void ReleaseJob(uint32_t job_id);
@@ -62,6 +63,9 @@ class QplJobHWPool {
     return hw_job_ptr_pool[job_id];
   }
 
+
+  static constexpr qpl_path_t qpl_path = qpl_path_hardware;
+
  private:
   QplJobHWPool();
   ~QplJobHWPool();
@@ -75,13 +79,17 @@ class QplJobHWPool {
   static std::unique_ptr<uint8_t[]> hw_jobs_buffer;
   /// Job pool for storing all job object pointers
   static std::array<qpl_job*, MAX_JOB_NUMBER> hw_job_ptr_pool;
+
+  // /// Job pool for storing all job object pointers
+  // static std::array<qpl_job*, MAX_JOB_NUMBER> hw_job_ptr_pool;
+
   /// Locks for accessing each job object pointers
   static std::vector<bool> job_ptr_locks;
-  static constexpr qpl_path_t qpl_path = qpl_path_hardware;
   // static std::array<uint32_t, MAX_JOB_NUMBER> job_ptr_locks;
   static bool iaa_job_ready;
   std::mt19937 random_engine;
   std::uniform_int_distribution<int> distribution;
+  std::uniform_int_distribution<int> distribution_deflate;
   std::mutex job_lock;
 };
 

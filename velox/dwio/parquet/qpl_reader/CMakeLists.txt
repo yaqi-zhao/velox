@@ -32,8 +32,14 @@ set_source_files_properties(
         PROPERTIES COMPILE_FLAGS "-mwaitpkg")
 
 set_source_files_properties(
+        PageReader.h
+        PageReader.cpp
+        ParquetData.cpp
+        ParquetReader.cpp
         ParquetColumnReader.cpp
+        RepeatedColumnReader.cpp
         StringColumnReader.cpp
+        StructColumnReader.cpp
         PROPERTIES COMPILE_FLAGS "-mwaitpkg")
 
 

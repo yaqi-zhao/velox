@@ -4,6 +4,7 @@
 #include <atomic>
 //#include <stdatomic.h>
 //#include <stdbool.h>
+#include "velox/dwio/common/QplJobPool.h"
 
 #ifdef VELOX_ENABLE_QPL  
 
@@ -123,6 +124,55 @@ bool Qplcodec::Decompress(int64_t input_length, const uint8_t* input,
     }
 
 }
+
+uint32_t Qplcodec::DecompressAsync(int64_t input_length, const uint8_t* input,
+                             int64_t output_buffer_length, uint8_t* output)  {
+    if (output_buffer_length == 0) {
+      // The zlib library does not allow *output to be NULL, even when
+      // output_buffer_length is 0 (inflate() will return Z_STREAM_ERROR). We don't
+      // consider this an error, so bail early if no output is expected. Note that we
+      // don't signal an error if the input actually contains compressed data.
+      return 0;
+    }
+
+    // Reset the stream for this block
+    dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
+    uint32_t job_id = 0;
+    qpl_job* job = qpl_job_pool.AcquireDeflateJob(job_id);
+    // if (job->parser == qpl_p_parquet_rle) {
+    //   // qpl_init_job(qpl_job_pool.qpl_path, job);
+    //   job->parser = qpl_p_le_packed_array;
+    //   job->param_high = 0;
+    //   job->param_low = 0;
+    //   job->out_bit_width = qpl_ow_nom;
+    //   job->num_input_elements = 0;
+    //   job->total_in = 0;
+    //   job->total_out = 0;
+    //   job->xor_checksum = 0;
+    //   job->crc = 0;
+    //   job->last_index_max_value = 0;
+    //   job->sum_value = 0;
+    // }
+
+    job->op = qpl_op_decompress;
+    job->next_in_ptr = const_cast<uint8_t*>(input);
+    job->next_out_ptr = output;
+    job->available_in = input_length;
+    job->available_out = output_buffer_length;
+    job->flags = QPL_FLAG_FIRST | QPL_FLAG_LAST;
+
+    //decompression
+    qpl_status status = qpl_submit_job(job);
+    if (status != QPL_STS_OK) {
+        throw std::runtime_error("Error while decompression occurred.");
+        std::atomic_store(&job_status[job_id],false);
+    }else{
+      std::atomic_store(&job_status[job_id],false);
+      return job_id;
+    }
+
+}
+
 } // namespace
 
 #endif

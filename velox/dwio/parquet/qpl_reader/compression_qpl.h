@@ -19,6 +19,8 @@ public:
   //bool Freejob();
   bool Decompress(int64_t input_length, const uint8_t* input,
                              int64_t output_buffer_length, uint8_t* output);
+  uint32_t DecompressAsync(int64_t input_length, const uint8_t* input,
+                             int64_t output_buffer_length, uint8_t* output);                             
   bool Compress(int64_t input_length, const uint8_t* input,
                              int64_t output_buffer_length, uint8_t* output);                        
 
