@@ -140,6 +140,10 @@ class DictionaryColumnVisitor;
 template <typename TFilter, typename ExtractValues, bool isDense>
 class StringDictionaryColumnVisitor;
 
+template <typename TFilter, typename ExtractValues, bool isDense>
+class QplDictionaryColumnVisitor;
+
+
 // Template parameter for controlling filtering and action on a set of rows.
 template <typename T, typename TFilter, typename ExtractValues, bool isDense>
 class ColumnVisitor {
@@ -451,6 +455,9 @@ class ColumnVisitor {
 
   StringDictionaryColumnVisitor<TFilter, ExtractValues, isDense>
   toStringDictionaryColumnVisitor();
+
+  QplDictionaryColumnVisitor<TFilter, ExtractValues, isDense>
+  toQplDictionaryColumnVisitor();
 
   // Use for replacing *coall rows with non-null rows for fast path with
   // processRun and processRle.
@@ -997,7 +1004,17 @@ class DictionaryColumnVisitor
           value = input[i];
         }
       } else {
-        value = dict()[reinterpret_cast<const TIndex*>(input)[i]];
+        // value = dict()[reinterpret_cast<const TIndex*>(input)[i]];
+        const T* dict_1 = reinterpret_cast<const T*>(state_.dictionary.values);
+        const TIndex* idx_ptr = reinterpret_cast<const TIndex*>(input);
+        TIndex idx = idx_ptr[i];
+#ifdef VELOX_ENABLE_QPL        
+        while (idx >= state_.dictionary.numValues) {
+          _tpause(1, __rdtsc() + 1000);
+          idx = idx_ptr[i];
+        }
+#endif        
+        value = dict_1[idx];
       }
       if (scatter) {
         values[scatterRows[super::rowIndex_ + i]] = value;
@@ -1091,6 +1108,15 @@ ColumnVisitor<T, TFilter, ExtractValues, isDense>::
       filter_, reader_, RowSet(rows_ + rowIndex_, numRows_), values_);
   result.setNumValuesBias(numValuesBias_);
   return result;
+}
+
+template <typename T, typename TFilter, typename ExtractValues, bool isDense>
+QplDictionaryColumnVisitor<TFilter, ExtractValues, isDense>
+ColumnVisitor<T, TFilter, ExtractValues, isDense>::toQplDictionaryColumnVisitor() {
+    auto result = QplDictionaryColumnVisitor<TFilter, ExtractValues, isDense>(
+        filter_, reader_, RowSet(rows_ + rowIndex_, numRows_), values_);
+    // result.numValuesBias_ = numValuesBias_;
+    return result;
 }
 
 template <typename TFilter, typename ExtractValues, bool isDense>
