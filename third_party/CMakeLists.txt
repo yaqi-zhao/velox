@@ -93,21 +93,21 @@ if(VELOX_ENABLE_QPL)
   set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -ldl -laccel-config -L/usr/lib64")    
 
   set(QPL_CMAKE_ARGS
-    -DCMAKE_BUILD_TYPE=Debug
+    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
     -DCMAKE_INSTALL_LIBDIR=${QPL_PREFIX}/lib
     -DCMAKE_INSTALL_PREFIX=${QPL_PREFIX}
     -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
-    -DEFFICIENT_WAIT=PFF)
+    -DEFFICIENT_WAIT=OFF
+    -DCMAKE_C_COMPILER=/home/zhaoyaqi/program/gcc-9.4.0/_build/bin/gcc
+    -DCMAKE_CXX_COMPILER=/home/zhaoyaqi/program/gcc-9.4.0/_build/bin/g++)
 
   set(QPL_PATCH_COMMAND
-      "sed" "-i" "18,25d"
-      "${CMAKE_CURRENT_BINARY_DIR}/qpl_ep-prefix/src/qpl_ep/tools/CMakeLists.txt" && 
-      "sed" "-i" "87,88d"
-      "${CMAKE_CURRENT_BINARY_DIR}/qpl_ep-prefix/src/qpl_ep/CMakeLists.txt")
+      "sed" "-i" "20,27d"
+      "${CMAKE_CURRENT_BINARY_DIR}/qpl_ep-prefix/src/qpl_ep/tools/CMakeLists.txt")
 
   ExternalProject_Add(qpl_ep
                       ${EP_LOG_OPTIONS}
-                      URL https://github.com/intel/qpl/archive/refs/tags/v1.0.0.tar.gz
+                      URL https://github.com/intel/qpl/archive/refs/tags/v1.1.0.tar.gz
                       PATCH_COMMAND ${QPL_PATCH_COMMAND}
                       BUILD_BYPRODUCTS "${QPL_STATIC_LIB}"
                       CMAKE_ARGS ${QPL_CMAKE_ARGS}

@@ -74,7 +74,7 @@ class QplJobHWPool {
   bool AllocateQPLJob();
 
   /// Max jobs in QPL_JOB_POOL
-  static constexpr auto MAX_JOB_NUMBER = 256;
+  static constexpr auto MAX_JOB_NUMBER = 1024;
   /// Entire buffer for storing all job objects
   static std::unique_ptr<uint8_t[]> hw_jobs_buffer;
   /// Job pool for storing all job object pointers

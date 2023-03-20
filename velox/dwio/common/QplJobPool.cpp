@@ -114,8 +114,8 @@ qpl_job* QplJobHWPool::AcquireJob(uint32_t& job_id) {
     return nullptr;
   }
 
-  // auto status = qpl_init_job(qpl_path, hw_job_ptr_pool[index]);
-  // VELOX_DCHECK_EQ(status, QPL_STS_OK, "QPL job initialization false");
+  auto status = qpl_init_job(qpl_path, hw_job_ptr_pool[index]);
+  VELOX_DCHECK_EQ(status, QPL_STS_OK, "QPL job initialization false");
   return hw_job_ptr_pool[index];
 }
 
@@ -137,6 +137,8 @@ qpl_job* QplJobHWPool::AcquireDeflateJob(uint32_t& job_id) {
     return nullptr;
   }
 
+  // auto status = qpl_init_job(qpl_path, hw_job_ptr_pool[index]);
+  // VELOX_DCHECK_EQ(status, QPL_STS_OK, "QPL job initialization false"); 
   return hw_job_ptr_pool[index];
 }
 
