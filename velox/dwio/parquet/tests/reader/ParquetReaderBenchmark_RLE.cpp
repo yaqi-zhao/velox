@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#include <thread>
+#include <pthread.h>
+
 #include "velox/dwio/common/DataSink.h"
 #include "velox/dwio/common/Options.h"
 #include "velox/dwio/common/Statistics.h"
@@ -236,7 +239,7 @@ class ParquetReaderBenchmark {
     // auto scanSpec = nullptr;
 
     suspender.dismiss();
-    // auto startTime = system_clock::now();
+    auto startTime = system_clock::now();
 
     // Filter range is generated from a small sample data of 4096 rows. So the
     // upperBound and lowerBound are introduced to estimate the result size.
@@ -245,11 +248,11 @@ class ParquetReaderBenchmark {
       resultSize = read(parquetReaderType, rowType, scanSpec, nextSize);
     }
 
-    // auto curTime = system_clock::now();
-    // size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
-    //       curTime - startTime).count();
+    auto curTime = system_clock::now();
+    size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+          curTime - startTime).count();
     
-    // printf("ParquetReader_%d_%.0f_%.0f    time:%dus\n", int(nextSize), startPct, selectPct, (int)(msElapsed));        
+    printf("ParquetReader_%d_%.0f_%.0f    time:%dus\n", int(nextSize), startPct, selectPct, (int)(msElapsed));        
     // Add one to expected to avoid 0 in calculating upperBound and lowerBound.
     int expected = kNumBatches * kNumRowsPerBatch *
             (1 - (double)nullsRateX100 / 100) * ((double)selectPct / 100) +
@@ -297,6 +300,16 @@ void run(
       filterRateX100,
       nullsRateX100,
       nextSize);
+}
+
+
+void run_benchmark() {
+  run(1, "INTEGER", INTEGER(), 0, 0, 60000, false);
+  run(1, "INTEGER", INTEGER(), 0, 0, 50000, false);
+  run(1, "INTEGER", INTEGER(), 0, 0, 40000, false);
+  run(1, "INTEGER", INTEGER(), 0, 0, 30000, false);
+  run(1, "INTEGER", INTEGER(), 0, 0, 20000, false);
+  run(1, "INTEGER", INTEGER(), 0, 0, 10000, false);
 }
 
 #define PARQUET_BENCHMARKS_FILTER_NULLS(_type_, _name_, _filter_, _null_) \
@@ -398,7 +411,34 @@ int main(int argc, char** argv) {
 //   dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
 // #endif  
   folly::init(&argc, &argv);
-  folly::runBenchmarks();
+  auto startTime = system_clock::now();
+  for (int i = 0; i < 3; i++) {
+    if (argc > 1 && strcmp(argv[1], "async") == 0) {
+      std::vector<std::thread> submite_threads(10);
+      if (argc > 2) {
+        int x = atoi(argv[2]);
+        if (x > 0) {
+          submite_threads.resize(x);
+        }
+      }
+      for(int i = 0; i < submite_threads.size(); i++) {
+        submite_threads[i] = std::thread(run_benchmark);
+      }
+      startTime = system_clock::now();
+      for (int i = 0; i < submite_threads.size(); i++) {
+        submite_threads[i].join();
+        // usleep(1);
+      }
+    } else {
+      // printf("ParquetReaderBenchmark argc: %d, argv:%s", argc, argv[0]);
+      folly::runBenchmarks();
+    }
+  }
+  auto curTime = system_clock::now();
+  size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+        curTime - startTime).count();
+  
+  printf("ParquetReaderBenchmark End    time: %d us\n", (int)(msElapsed)); 
   return 0;
 }
 
