@@ -181,7 +181,7 @@ class RleBpDataDecoder : public facebook::velox::parquet::qpl_reader::RleBpDecod
     // using TValues = typename std::remove_reference<decltype(values[0])>::type;
     using TIndex = typename std::make_signed_t<
         typename dwio::common::make_index<TValues>::type>;
-#ifdef VELOX_ENABLE_QPL        
+#ifndef VELOX_ENABLE_QPL        
     if (sizeof(TIndex) == 4) {
       // std::cout << "TINndex is 4" << std::endl;
       facebook::velox::dwio::common::unpack_uint<uint32_t>(reinterpret_cast<const uint8_t*&>(super::bufferStart_),

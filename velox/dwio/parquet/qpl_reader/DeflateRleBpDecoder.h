@@ -239,6 +239,7 @@ class DeflateRleBpDecoder {
 
       auto status = qpl_submit_job(job);
       VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
+    // std::cout << "submit decode job: " << (int)job_id << std::endl;
       return job_id;
   }
 

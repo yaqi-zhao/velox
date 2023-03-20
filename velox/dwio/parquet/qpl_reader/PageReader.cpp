@@ -57,6 +57,7 @@ void PageReader::seekToPage(int64_t row) {
         prepareDataPageV2(pageHeader, row);
         break;
       case thrift::PageType::DICTIONARY_PAGE:
+        dict_qpl_job_id = 0;
         if (row == kRepDefOnly) {
           skipBytes(
               pageHeader.compressed_page_size,
@@ -231,6 +232,7 @@ const char* FOLLY_NONNULL PageReader::uncompressData(
           (const uint8_t*)pageData,
           uncompressedSize,
           (uint8_t *)uncompressedData_->asMutable<char>());
+      // std::cout << "submit dict job: " << (int)dict_qpl_job_id << std::endl;
       return nullptr;
 
       // auto ret=qpl_dec->Decompress(
@@ -423,14 +425,18 @@ void PageReader::waitQplJob(uint32_t job_id) {
   dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
   qpl_job* job = qpl_job_pool.GetJobById(job_id);
   auto status = QPL_STS_OK;
+  uint32_t check_time = 0;
   do
   {
-      _tpause(1, __rdtsc() + 1000);
+      // _tpause(1, __rdtsc() + 1000);
+      _umwait(1, __rdtsc() + 1000);
       status = qpl_check_job(job);
-  } while (status == QPL_STS_BEING_PROCESSED);
+      check_time++;
+  } while (status == QPL_STS_BEING_PROCESSED && check_time < 6000);
   
   qpl_fini_job(job);
   qpl_job_pool.ReleaseJob(job_id);
+  // std::cout << "wait qpl job: " << job_id << std::endl;
   VELOX_DCHECK(status == QPL_STS_OK, "Check of QPL Job failed, status: {}", status);
 }
 

@@ -139,21 +139,6 @@ uint32_t Qplcodec::DecompressAsync(int64_t input_length, const uint8_t* input,
     dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
     uint32_t job_id = 0;
     qpl_job* job = qpl_job_pool.AcquireDeflateJob(job_id);
-    // if (job->parser == qpl_p_parquet_rle) {
-    //   // qpl_init_job(qpl_job_pool.qpl_path, job);
-    //   job->parser = qpl_p_le_packed_array;
-    //   job->param_high = 0;
-    //   job->param_low = 0;
-    //   job->out_bit_width = qpl_ow_nom;
-    //   job->num_input_elements = 0;
-    //   job->total_in = 0;
-    //   job->total_out = 0;
-    //   job->xor_checksum = 0;
-    //   job->crc = 0;
-    //   job->last_index_max_value = 0;
-    //   job->sum_value = 0;
-    // }
-
     job->op = qpl_op_decompress;
     job->next_in_ptr = const_cast<uint8_t*>(input);
     job->next_out_ptr = output;
