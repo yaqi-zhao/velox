@@ -22,6 +22,8 @@
 #include <vector>
 #include <mutex>
 
+
+
 #ifdef VELOX_ENABLE_QPL
 #include "qpl/qpl.h"
 
@@ -57,7 +59,6 @@ class QplJobHWPool {
     return hw_job_ptr_pool[job_id];
   }
 
-
   static constexpr qpl_path_t qpl_path = qpl_path_hardware;
 
  private:
@@ -67,7 +68,7 @@ class QplJobHWPool {
   bool AllocateQPLJob();
 
   /// Max jobs in QPL_JOB_POOL
-  static constexpr auto MAX_JOB_NUMBER = 1024;
+  static constexpr auto MAX_JOB_NUMBER = 256;
   /// Entire buffer for storing all job objects
   static std::unique_ptr<uint8_t[]> hw_jobs_buffer;
   /// Job pool for storing all job object pointers

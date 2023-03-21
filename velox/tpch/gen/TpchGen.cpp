@@ -108,6 +108,10 @@ std::string_view toTableName(Table table) {
       return "nation";
     case Table::TBL_REGION:
       return "region";
+    case Table::TBL_TEST:
+      return "test";  
+    case Table::TBL_LINEORDER_FLAT_2:
+      return "lineorder_flat_2";            
   }
   return ""; // make gcc happy.
 }
@@ -122,6 +126,7 @@ Table fromTableName(std::string_view tableName) {
       {"lineitem", Table::TBL_LINEITEM},
       {"nation", Table::TBL_NATION},
       {"region", Table::TBL_REGION},
+      {"test", Table::TBL_TEST},
   };
 
   auto it = map.find(tableName);
@@ -277,7 +282,38 @@ RowTypePtr getTableSchema(Table table) {
           });
       return type;
     }
-
+    case Table::TBL_TEST: {
+      static RowTypePtr type = ROW(
+          {
+            "column_1",
+          },
+          {
+              INTEGER(),
+          });
+      return type;
+    }
+    case Table::TBL_TEST_SNAPPY: {
+      static RowTypePtr type = ROW(
+          {
+            "column_1",
+          },
+          {
+              INTEGER(),
+          });
+      return type;
+    }    
+    case Table::TBL_LINEORDER_FLAT_2: {
+      static RowTypePtr type = ROW(
+          {
+            "lo_orderkey",
+            "lo_custkey",   
+          },
+          {
+              BIGINT(),
+              BIGINT(),
+          });
+      return type;
+    }       
     case Table::TBL_LINEITEM: {
       static RowTypePtr type = ROW(
           {

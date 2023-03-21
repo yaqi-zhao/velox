@@ -56,7 +56,7 @@ class ParquetReaderBenchmark {
           ::parquet::WriterProperties::Builder().disable_dictionary()->build();
     } else {
       // The parquet file is in dictionary encoding format.
-      writerProperties = ::parquet::WriterProperties::Builder().compression(::parquet::Compression::QPL)->build();
+      writerProperties = ::parquet::WriterProperties::Builder().compression(::parquet::Compression::SNAPPY)->build();
     }
     writer_ = std::make_unique<facebook::velox::parquet::Writer>(
         std::move(sink), *pool_, 10000, writerProperties);
@@ -285,7 +285,7 @@ void run(
   BIGINT()->toString();
   benchmark.readSingleColumn(
       ParquetReaderType::NATIVE,
-      columnName,
+      "column_1",
       type,
       0,
       filterRateX100,
@@ -340,7 +340,7 @@ PARQUET_BENCHMARKS(INTEGER(), INTEGER);
 // TODO: Add all data types
 
 int main(int argc, char** argv) {
-  sleep(10);
+  // sleep(10);
 #ifdef VELOX_ENABLE_QPL  
   dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
 #endif  

@@ -1002,10 +1002,12 @@ class DictionaryColumnVisitor
         const T* dict_1 = reinterpret_cast<const T*>(state_.dictionary.values);
         const TIndex* idx_ptr = reinterpret_cast<const TIndex*>(input);
         TIndex idx = idx_ptr[i];
-#ifdef VELOX_ENABLE_QPL        
-        while (idx >= state_.dictionary.numValues) {
+#ifdef VELOX_ENABLE_QPL
+        uint32_t check_time = 0;
+        while (idx >= state_.dictionary.numValues && check_time < 60000) {
           _tpause(1, __rdtsc() + 1000);
           idx = idx_ptr[i];
+          check_time++;
         }
 #endif        
         value = dict_1[idx];

@@ -95,6 +95,9 @@ class TpchQueryBuilder {
   TpchPlan getQ20Plan() const;
   TpchPlan getQ21Plan() const;
   TpchPlan getQ22Plan() const;
+  TpchPlan getQ23Plan() const;
+  TpchPlan getQ24Plan() const;
+  TpchPlan getQ25Plan() const;
 
   const std::vector<std::string>& getTableFilePaths(
       const std::string& tableName) const {
@@ -128,6 +131,9 @@ class TpchQueryBuilder {
   static constexpr const char* kPart = "part";
   static constexpr const char* kSupplier = "supplier";
   static constexpr const char* kPartsupp = "partsupp";
+  static constexpr const char* kTest = "test";
+  static constexpr const char* kTestSnappy = "test_snappy";
+  static constexpr const char* kLineorderFlat2 = "lineorder_flat_2";
   std::shared_ptr<memory::MemoryPool> pool_ = memory::getDefaultMemoryPool();
 };
 

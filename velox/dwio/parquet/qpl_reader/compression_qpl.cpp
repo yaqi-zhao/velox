@@ -118,8 +118,7 @@ bool Qplcodec::Decompress(int64_t input_length, const uint8_t* input,
     if (status != QPL_STS_OK) {
         throw std::runtime_error("Error while decompression occurred.");
         std::atomic_store(&job_status[job_id],false);
-    }else{
-      std::atomic_store(&job_status[job_id],false);
+    } else {
       return true;
     }
 
@@ -151,8 +150,7 @@ uint32_t Qplcodec::DecompressAsync(int64_t input_length, const uint8_t* input,
     if (status != QPL_STS_OK) {
         throw std::runtime_error("Error while decompression occurred.");
         std::atomic_store(&job_status[job_id],false);
-    }else{
-      std::atomic_store(&job_status[job_id],false);
+    } else {
       return job_id;
     }
 

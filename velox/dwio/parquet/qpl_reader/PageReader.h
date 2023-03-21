@@ -25,6 +25,8 @@
 #include "velox/dwio/parquet/qpl_reader/DeflateRleBpDecoder.h"
 #include "velox/dwio/parquet/reader/StringDecoder.h"
 #include "velox/vector/BaseVector.h"
+#include "velox/dwio/parquet/qpl_reader/compression_qpl.h"
+
 
 namespace facebook::velox::parquet::qpl_reader {
 
@@ -243,7 +245,7 @@ class PageReader {
       Visitor visitor) {
       if (isDictionary()) {
         auto dictVisitor = visitor.toDictionaryColumnVisitor();
-        return dictionaryIdDecoder_->decodeWithVisitor<false>(nullptr, dictVisitor);
+        return dictionaryIdDecoder_->decodeWithVisitor<false>(nullptr, dictVisitor, visitBase_);
         // dictionaryIdDecoder_->readWithVisitor<false>(nullptr, dictVisitor);
       } else {
         directDecoder_->readWithVisitor<false>(
@@ -463,6 +465,7 @@ class PageReader {
   std::unique_ptr<DeflateRleBpDecoder> dictionaryIdDecoder_;
   std::unique_ptr<StringDecoder> stringDecoder_;
   uint32_t dict_qpl_job_id;
+  qpl_status dict_qpl_job_status;
   // Add decoders for other encodings here.
 };
 
@@ -481,12 +484,15 @@ void PageReader::readWithVisitor(Visitor& visitor) {
   folly::Range<const vector_size_t*> pageRows;
   const uint64_t* nulls = nullptr;
   bool isMultiPage = false;
+  dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
   while (rowsForPage(reader, hasFilter, mayProduceNulls, pageRows, nulls)) {
     bool nullsFromFastPath = false;
     int32_t numValuesBeforePage = numRowsInReader<hasFilter>(reader);
     visitor.setNumValuesBias(numValuesBeforePage);
     visitor.setRows(pageRows);
     uint32_t decode_job_id = callDecoder(nulls, nullsFromFastPath, visitor);
+
+    // process dict qpl job
     waitQplJob(dict_qpl_job_id);
     prepareDict(dictionaryPageHeader_);
     auto& scanState = reader.scanState();
@@ -494,6 +500,8 @@ void PageReader::readWithVisitor(Visitor& visitor) {
       scanState.dictionary = dictionary_;
     }
     scanState.updateRawState();
+    qpl_job_pool.ReleaseJob(dict_qpl_job_id);
+    dict_qpl_job_id = 0;
 
     waitQplJob(decode_job_id);
     callFilter(nulls, nullsFromFastPath, visitor);

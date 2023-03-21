@@ -98,6 +98,7 @@ if(VELOX_ENABLE_QPL)
     -DCMAKE_INSTALL_PREFIX=${QPL_PREFIX}
     -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
     -DEFFICIENT_WAIT=OFF
+    -DQPL_BUILD_TESTS=0
     -DCMAKE_C_COMPILER=/home/zhaoyaqi/program/gcc-9.4.0/_build/bin/gcc
     -DCMAKE_CXX_COMPILER=/home/zhaoyaqi/program/gcc-9.4.0/_build/bin/g++)
 

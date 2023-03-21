@@ -32,7 +32,7 @@
 #include "velox/functions/prestosql/aggregates/RegisterAggregateFunctions.h"
 #include "velox/functions/prestosql/registration/RegistrationFunctions.h"
 #include "velox/parse/TypeResolver.h"
-// #include "velox/dwio/parquet/qpl_reader/PageReader.h"
+#include "velox/dwio/common/QplJobPool.h"
 
 #include <sys/time.h>
 
@@ -113,6 +113,7 @@ DEFINE_int32(
     "GB of process memory for cache and query.. if "
     "non-0, uses mmap to allocator and in-process data cache.");
 DEFINE_int32(num_repeats, 1, "Number of times to run each query");
+DEFINE_int32(num_threads, 1, "Number of thread to run each query");
 
 DEFINE_validator(data_path, &notEmpty);
 DEFINE_validator(data_format, &validateDataFormat);
@@ -197,99 +198,121 @@ class TpchBenchmark {
 TpchBenchmark benchmark;
 std::shared_ptr<TpchQueryBuilder> queryBuilder;
 
-BENCHMARK(q1) {
-  const auto planContext = queryBuilder->getQueryPlan(1);
+// BENCHMARK(q1) {
+//   const auto planContext = queryBuilder->getQueryPlan(1);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q3) {
+//   const auto planContext = queryBuilder->getQueryPlan(3);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q5) {
+//   const auto planContext = queryBuilder->getQueryPlan(5);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q6) {
+//   const auto planContext = queryBuilder->getQueryPlan(6);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q7) {
+//   const auto planContext = queryBuilder->getQueryPlan(7);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q8) {
+//   const auto planContext = queryBuilder->getQueryPlan(8);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q9) {
+//   const auto planContext = queryBuilder->getQueryPlan(9);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q10) {
+//   const auto planContext = queryBuilder->getQueryPlan(10);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q12) {
+//   const auto planContext = queryBuilder->getQueryPlan(12);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q13) {
+//   const auto planContext = queryBuilder->getQueryPlan(13);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q14) {
+//   const auto planContext = queryBuilder->getQueryPlan(14);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q15) {
+//   const auto planContext = queryBuilder->getQueryPlan(15);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q16) {
+//   const auto planContext = queryBuilder->getQueryPlan(16);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q17) {
+//   const auto planContext = queryBuilder->getQueryPlan(17);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q18) {
+//   const auto planContext = queryBuilder->getQueryPlan(18);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q19) {
+//   const auto planContext = queryBuilder->getQueryPlan(19);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q20) {
+//   const auto planContext = queryBuilder->getQueryPlan(20);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q21) {
+//   const auto planContext = queryBuilder->getQueryPlan(21);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q22) {
+//   const auto planContext = queryBuilder->getQueryPlan(22);
+//   benchmark.run(planContext);
+// }
+
+BENCHMARK(q23) {
+  const auto planContext = queryBuilder->getQueryPlan(23);
   benchmark.run(planContext);
 }
 
-BENCHMARK(q3) {
-  const auto planContext = queryBuilder->getQueryPlan(3);
+BENCHMARK(q24) {
+  const auto planContext = queryBuilder->getQueryPlan(24);
   benchmark.run(planContext);
 }
 
-BENCHMARK(q5) {
-  const auto planContext = queryBuilder->getQueryPlan(5);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q6) {
-  const auto planContext = queryBuilder->getQueryPlan(6);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q7) {
-  const auto planContext = queryBuilder->getQueryPlan(7);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q8) {
-  const auto planContext = queryBuilder->getQueryPlan(8);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q9) {
-  const auto planContext = queryBuilder->getQueryPlan(9);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q10) {
-  const auto planContext = queryBuilder->getQueryPlan(10);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q12) {
-  const auto planContext = queryBuilder->getQueryPlan(12);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q13) {
-  const auto planContext = queryBuilder->getQueryPlan(13);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q14) {
-  const auto planContext = queryBuilder->getQueryPlan(14);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q15) {
-  const auto planContext = queryBuilder->getQueryPlan(15);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q16) {
-  const auto planContext = queryBuilder->getQueryPlan(16);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q17) {
-  const auto planContext = queryBuilder->getQueryPlan(17);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q18) {
-  const auto planContext = queryBuilder->getQueryPlan(18);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q19) {
-  const auto planContext = queryBuilder->getQueryPlan(19);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q20) {
-  const auto planContext = queryBuilder->getQueryPlan(20);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q21) {
-  const auto planContext = queryBuilder->getQueryPlan(21);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q22) {
-  const auto planContext = queryBuilder->getQueryPlan(22);
-  benchmark.run(planContext);
+void run_benchmark(int query_id) {
+  const auto queryPlan = queryBuilder->getQueryPlan(FLAGS_run_query_verbose);
+  const auto [cursor, actualResults] = benchmark.run(queryPlan);
+  if (!cursor) {
+    LOG(ERROR) << "Query terminated with error. Exiting";
+    exit(1);
+  }
+  auto task = cursor->task();
+  ensureTaskCompletion(task.get());  
+  return;
 }
 
 int main(int argc, char** argv) {
@@ -303,17 +326,9 @@ int main(int argc, char** argv) {
   queryBuilder->initialize(FLAGS_data_path);
   if (FLAGS_run_query_verbose == -1) {
     folly::runBenchmarks();
-  } else {
-    struct timeval start, end;
-    
-    int queries[22]={1,3,5,6,7,8,9,10,12,13,14,15,16,18,19,22};
-    for(int j=0;j<16;j++){
-      gettimeofday(&start, NULL);
-    for(int i=0;i<10;i++){
-      int query_bose=queries[j];
-
-    //const auto queryPlan = queryBuilder->getQueryPlan(FLAGS_run_query_verbose);
-    const auto queryPlan = queryBuilder->getQueryPlan(query_bose);
+  } else if (FLAGS_num_threads == 1) {
+    // sleep(10);
+    const auto queryPlan = queryBuilder->getQueryPlan(FLAGS_run_query_verbose);
     const auto [cursor, actualResults] = benchmark.run(queryPlan);
     if (!cursor) {
       LOG(ERROR) << "Query terminated with error. Exiting";
@@ -326,8 +341,7 @@ int main(int argc, char** argv) {
       std::cout << std::endl;
     }
     const auto stats = task->taskStats();
-
-    /* std::cout << fmt::format(
+    std::cout << fmt::format(
                      "Execution time: {}",
                      succinctMillis(
                          stats.executionEndTimeMs - stats.executionStartTimeMs))
@@ -339,12 +353,28 @@ int main(int argc, char** argv) {
               << std::endl;
     std::cout << printPlanWithStats(
                      *queryPlan.plan, stats, FLAGS_include_custom_stats)
-              << std::endl; */
-  }
-  gettimeofday(&end, NULL);
-   printf("%d Time taken to count to 10^5 is : %ld micro seconds\n",queries[j],
-    ((end.tv_sec * 1000000 + end.tv_usec) -
-    (start.tv_sec * 1000000 + start.tv_usec))/1000000);
+              << std::endl;
+  } else {
+#ifdef VELOX_ENABLE_QPL    
+    dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
+#endif    
+    // sleep(10);
+    auto startTime = std::chrono::system_clock::now();
+    std::vector<std::thread> submite_threads(FLAGS_num_threads);
+    for (int i = 0; i < 800 / FLAGS_num_threads; i++) {
+      for(int j = 0; j < submite_threads.size(); j++) {
+        submite_threads[j] = std::thread(run_benchmark, FLAGS_run_query_verbose);
+      }
+      for (int j = 0; j < submite_threads.size(); j++) {
+        submite_threads[j].join();
+        // usleep(1);
+      }
     }
+    auto curTime = std::chrono::system_clock::now();
+    size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+        curTime - startTime).count();
+    int qps = 800 * 1000000 / msElapsed;
+    printf("QueryBenchmark  q%d  concurrency_%d  time: %d us   QPS: %d\n", FLAGS_run_query_verbose, FLAGS_num_threads, (int)(msElapsed), qps);
   }
 }
+// }
