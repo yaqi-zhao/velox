@@ -407,9 +407,6 @@ PARQUET_BENCHMARKS(INTEGER(), INTEGER);
 
 int main(int argc, char** argv) {
   // sleep(10);
-// #ifdef VELOX_ENABLE_QPL  
-//   dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
-// #endif  
   folly::init(&argc, &argv);
   auto startTime = system_clock::now();
   for (int i = 0; i < 3; i++) {
