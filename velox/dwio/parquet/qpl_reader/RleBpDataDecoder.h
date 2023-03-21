@@ -392,21 +392,7 @@ template <bool hasFilter, bool hasHook, bool scatter, typename Visitor>
         }
       }
       readHeader();
-    }
-#ifdef  VELOX_QPL_ASYNC_MODE
-    dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
-    for (int i = 0; i < qpl_job_ids.size(); i++) {
-      if (qpl_job_pool.job_status(qpl_job_ids[i])) {
-        auto status = qpl_wait_job(qpl_job_pool.GetJobById(qpl_job_ids[i]));
-        if (status != QPL_STS_OK) {
-          std::cout << "qpl execution error: " << status << std::endl;
-        }
-        
-        qpl_fini_job(qpl_job_pool.GetJobById(qpl_job_ids[i]));
-        qpl_job_pool.ReleaseJob(qpl_job_ids[i]);
-      }
-    }
-#endif   
+    } 
   }
 
   // Loads a bit field from 'ptr' + bitOffset for up to 'bitWidth' bits. makes

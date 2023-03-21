@@ -74,7 +74,6 @@ option(VELOX_BUILD_TEST_UTILS "Builds Velox test utilities" OFF)
 option(VELOX_BUILD_PYTHON_PACKAGE "Builds Velox Python bindings" OFF)
 option(VELOX_BUILD_BENCHMARKS "Builds Velox benchmarks" OFF)
 option(VELOX_ENABLE_QPL "Enable Intel QPL support" OFF)
-option(VELOX_QPL_ASYNC_MODE "Enable Intel QPL Async mode" OFF)
 
 if(${VELOX_BUILD_MINIMAL})
   # Enable and disable components for velox base build
@@ -187,10 +186,6 @@ endif()
 
 if(VELOX_ENABLE_QPL)
   add_definitions(-DVELOX_ENABLE_QPL)
-endif()
-
-if(VELOX_QPL_ASYNC_MODE)
-  add_definitions(-DVELOX_QPL_ASYNC_MODE)
 endif()
 
 # Turn on Codegen only for Clang and non Mac systems.
