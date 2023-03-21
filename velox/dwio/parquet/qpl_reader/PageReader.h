@@ -241,21 +241,7 @@ class PageReader {
       const uint64_t* FOLLY_NULLABLE nulls,
       bool& nullsFromFastPath,
       Visitor visitor) {
-    // if (nulls) {
-    //   nullsFromFastPath = dwio::common::useFastPath<Visitor, true>(visitor) &&
-    //       (!this->type_->type->isLongDecimal()) &&
-    //       (this->type_->type->isShortDecimal() ? isDictionary() : true);
-
-    //   if (isDictionary()) {
-    //     auto dictVisitor = visitor.toQplDictionaryColumnVisitor();
-    //     dictionaryIdDecoder_->readWithVisitor<true>(nulls, dictVisitor);
-    //   } else {
-    //     directDecoder_->readWithVisitor<true>(
-    //         nulls, visitor, nullsFromFastPath);
-    //   }
-    // } else {
       if (isDictionary()) {
-        // auto dictVisitor = visitor.toQplDictionaryColumnVisitor();
         auto dictVisitor = visitor.toDictionaryColumnVisitor();
         return dictionaryIdDecoder_->decodeWithVisitor<false>(nullptr, dictVisitor);
         // dictionaryIdDecoder_->readWithVisitor<false>(nullptr, dictVisitor);
@@ -277,7 +263,6 @@ class PageReader {
       bool& nullsFromFastPath,
       Visitor visitor) {
       if (isDictionary()) {
-        // auto dictVisitor = visitor.toQplDictionaryColumnVisitor();
         auto dictVisitor = visitor.toDictionaryColumnVisitor();
         dictionaryIdDecoder_->filterWithVisitor<false>(nullptr, dictVisitor);
         // dictionaryIdDecoder_->readWithVisitor<false>(nullptr, dictVisitor);
@@ -296,18 +281,6 @@ class PageReader {
       const uint64_t* FOLLY_NULLABLE nulls,
       bool& nullsFromFastPath,
       Visitor visitor) {
-        // TODO: process nulls
-    // if (nulls) {
-    //   if (isDictionary()) {
-    //     nullsFromFastPath = dwio::common::useFastPath<Visitor, true>(visitor);
-    //     auto dictVisitor = visitor.toStringDictionaryColumnVisitor();
-    //     dictionaryIdDecoder_->readWithVisitor<true>(nulls, dictVisitor);
-    //   } else {
-    //     nullsFromFastPath = false;
-    //     stringDecoder_->readWithVisitor<true>(nulls, visitor);
-    //   }
-    // } else {
-
       if (isDictionary()) {
         auto dictVisitor = visitor.toStringDictionaryColumnVisitor();
         dictionaryIdDecoder_->readWithVisitor<false>(nullptr, dictVisitor);
@@ -315,7 +288,6 @@ class PageReader {
         stringDecoder_->readWithVisitor<false>(nulls, visitor);
       }
       return 0;
-    // }
   }
 
   template <

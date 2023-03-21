@@ -22,8 +22,6 @@
 #include "velox/dwio/common/QplJobPool.h"
 #include "velox/dwio/common/TypeUtil.h"
 #include "velox/vector/BaseVector.h"
-#include "velox/dwio/parquet/qpl_reader/QplDictionaryColumnVisitor.h"
-
 
 namespace facebook::velox::parquet::qpl_reader {
 
@@ -155,11 +153,6 @@ class DeflateRleBpDecoder {
 
       qpl_job* job = qpl_job_pool.AcquireJob(job_id);
 
-      // uint32_t job_size = 0;
-      // qpl_get_job_size(qpl_path_hardware, &job_size);
-      // qpl_job* job = (qpl_job *) std::malloc(job_size);
-      // auto status_1 = qpl_init_job(qpl_path_hardware, job);
-
       job->op=qpl_op_extract;
       job->next_in_ptr=reinterpret_cast<uint8_t*>(const_cast<char*>(pageData_));
       job->available_in=pageHeader_.compressed_page_size;
@@ -174,17 +167,13 @@ class DeflateRleBpDecoder {
 
       auto status = qpl_submit_job(job);
       VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
-      // status = qpl_wait_job(job);
       do
       {
           _tpause(1, __rdtsc() + 1000);
       } while (qpl_check_job(job) == QPL_STS_BEING_PROCESSED);
-      // std::cout << "deflate rle success" << std::endl;
       qpl_fini_job(qpl_job_pool.GetJobById(job_id));
       qpl_fini_job(job);
-      // std::free(job);
       qpl_job_pool.ReleaseJob(job_id);
-      // job = nullptr;
 
       // Step 2.  filter dictionary to get output
       int32_t numValues = 0;
@@ -208,22 +197,17 @@ class DeflateRleBpDecoder {
       const int32_t* FOLLY_NULLABLE scatterRows,
       ColumnVisitor& visitor) {
 
-      // Step1. uncompress + scan with mask data pate to get output vector
-      auto numRows = visitor.numRows();
-      auto numAllRows = visitor.numRows();
-      auto values = visitor.rawValues(numRows);
-      using TValues = typename std::remove_reference<decltype(values[0])>::type;
-      using TIndex = typename std::make_signed_t<typename dwio::common::make_index<TValues>::type>;
-      
-      dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
-      uint32_t job_id = 0;
+    // Step1. uncompress + scan with mask data pate to get output vector
+    auto numRows = visitor.numRows();
+    auto numAllRows = visitor.numRows();
+    auto values = visitor.rawValues(numRows);
+    using TValues = typename std::remove_reference<decltype(values[0])>::type;
+    using TIndex = typename std::make_signed_t<typename dwio::common::make_index<TValues>::type>;
+    
+    dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
+    uint32_t job_id = 0;
 
-      qpl_job* job = qpl_job_pool.AcquireJob(job_id);
-
-      // uint32_t job_size = 0;
-      // qpl_get_job_size(qpl_path_hardware, &job_size);
-      // qpl_job* job = (qpl_job *) std::malloc(job_size);
-      // auto status_1 = qpl_init_job(qpl_path_hardware, job);
+    qpl_job* job = qpl_job_pool.AcquireJob(job_id);
 
     job->op = qpl_op_extract;
     job->next_in_ptr = reinterpret_cast<uint8_t*>(const_cast<char*>(pageData_));
@@ -265,7 +249,6 @@ class DeflateRleBpDecoder {
         visitor.setNumValues(hasFilter ? numValues : numAllRows);
         return;
       }       
-
   }  
 
 };

@@ -140,9 +140,6 @@ class DictionaryColumnVisitor;
 template <typename TFilter, typename ExtractValues, bool isDense>
 class StringDictionaryColumnVisitor;
 
-template <typename TFilter, typename ExtractValues, bool isDense>
-class QplDictionaryColumnVisitor;
-
 
 // Template parameter for controlling filtering and action on a set of rows.
 template <typename T, typename TFilter, typename ExtractValues, bool isDense>
@@ -455,9 +452,6 @@ class ColumnVisitor {
 
   StringDictionaryColumnVisitor<TFilter, ExtractValues, isDense>
   toStringDictionaryColumnVisitor();
-
-  QplDictionaryColumnVisitor<TFilter, ExtractValues, isDense>
-  toQplDictionaryColumnVisitor();
 
   // Use for replacing *coall rows with non-null rows for fast path with
   // processRun and processRle.
@@ -1108,15 +1102,6 @@ ColumnVisitor<T, TFilter, ExtractValues, isDense>::
       filter_, reader_, RowSet(rows_ + rowIndex_, numRows_), values_);
   result.setNumValuesBias(numValuesBias_);
   return result;
-}
-
-template <typename T, typename TFilter, typename ExtractValues, bool isDense>
-QplDictionaryColumnVisitor<TFilter, ExtractValues, isDense>
-ColumnVisitor<T, TFilter, ExtractValues, isDense>::toQplDictionaryColumnVisitor() {
-    auto result = QplDictionaryColumnVisitor<TFilter, ExtractValues, isDense>(
-        filter_, reader_, RowSet(rows_ + rowIndex_, numRows_), values_);
-    // result.numValuesBias_ = numValuesBias_;
-    return result;
 }
 
 template <typename TFilter, typename ExtractValues, bool isDense>

@@ -18,21 +18,8 @@
 #include "velox/dwio/common/QplJobPool.h"
 #include "velox/common/base/Exceptions.h"
 
-// #if defined(linux)
-// #include <x86intrin.h>
-
-// #else
-// #include <intrin.h>
-// #include <emmintrin.h>
-// #include <immintrin.h>
-// #endif
-
-
 #ifdef VELOX_ENABLE_QPL
 
-// namespace facebook {
-// namespace velox {
-// namespace qpl {
 namespace facebook::velox::dwio::common {
 
 std::array<qpl_job*, QplJobHWPool::MAX_JOB_NUMBER> QplJobHWPool::hw_job_ptr_pool;
@@ -165,17 +152,5 @@ bool QplJobHWPool::tryLockJob(uint32_t index) {
   }
   return false;
 }
-
-// void QplJobHWPool::unLockJob(uint32_t index) {
-//   // TODO
-//   if (index >= MAX_JOB_NUMBER) {
-//     return;
-//   }
-//   job_ptr_locks[index] = false;
-// }
-
 }
-// }  // namespace qpl
-// }  // namespace velox
-// }  // namespace facebook
 #endif
