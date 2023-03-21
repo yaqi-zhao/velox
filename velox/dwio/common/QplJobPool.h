@@ -17,19 +17,13 @@
 
 #pragma once
 
-#include <cstdint>
 #include <memory>
 #include <random>
-#include <utility>
 #include <vector>
 #include <mutex>
 
 #ifdef VELOX_ENABLE_QPL
 #include "qpl/qpl.h"
-
-// namespace facebook {
-// namespace velox {
-// namespace qpl {  
 
 namespace facebook::velox::dwio::common {
 
@@ -70,7 +64,6 @@ class QplJobHWPool {
   QplJobHWPool();
   ~QplJobHWPool();
   bool tryLockJob(uint32_t index);
-  // void unLockJob(uint32_t index);
   bool AllocateQPLJob();
 
   /// Max jobs in QPL_JOB_POOL
@@ -80,12 +73,8 @@ class QplJobHWPool {
   /// Job pool for storing all job object pointers
   static std::array<qpl_job*, MAX_JOB_NUMBER> hw_job_ptr_pool;
 
-  // /// Job pool for storing all job object pointers
-  // static std::array<qpl_job*, MAX_JOB_NUMBER> hw_job_ptr_pool;
-
   /// Locks for accessing each job object pointers
   static std::vector<bool> job_ptr_locks;
-  // static std::array<uint32_t, MAX_JOB_NUMBER> job_ptr_locks;
   static bool iaa_job_ready;
   std::mt19937 random_engine;
   std::uniform_int_distribution<int> distribution;
@@ -94,7 +83,4 @@ class QplJobHWPool {
 };
 
 }
-// }  //  namespace qpl
-// }  //  namespace velox
-// }  //  namespace facebook
 #endif
