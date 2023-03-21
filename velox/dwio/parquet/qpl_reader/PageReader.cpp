@@ -20,13 +20,14 @@
 #include "velox/dwio/parquet/qpl_reader/NestedStructureDecoder.h"
 #include "velox/dwio/parquet/thrift/ThriftTransport.h"
 #include "velox/vector/FlatVector.h"
-#include "velox/dwio/parquet/qpl_reader/compression_qpl.h"
-
 
 #include <snappy.h>
 #include <thrift/protocol/TCompactProtocol.h> //@manual
 #include <zlib.h>
 #include <zstd.h>
+
+#include <unistd.h>       // for syscall()
+#include <sys/syscall.h> 
 
 namespace facebook::velox::parquet::qpl_reader {
 
@@ -58,6 +59,7 @@ void PageReader::seekToPage(int64_t row) {
         break;
       case thrift::PageType::DICTIONARY_PAGE:
         dict_qpl_job_id = 0;
+        dict_qpl_job_status = QPL_STS_BEING_PROCESSED;
         if (row == kRepDefOnly) {
           skipBytes(
               pageHeader.compressed_page_size,
@@ -232,7 +234,9 @@ const char* FOLLY_NONNULL PageReader::uncompressData(
           (const uint8_t*)pageData,
           uncompressedSize,
           (uint8_t *)uncompressedData_->asMutable<char>());
-      // std::cout << "submit dict job: " << (int)dict_qpl_job_id << std::endl;
+          
+      int id = syscall(SYS_gettid);
+      // std::cout << "submit dict job: " << (int)dict_qpl_job_id  << ", thread id: " << id << std::endl;
       return nullptr;
 
       // auto ret=qpl_dec->Decompress(
@@ -429,15 +433,20 @@ void PageReader::waitQplJob(uint32_t job_id) {
   do
   {
       // _tpause(1, __rdtsc() + 1000);
-      _umwait(1, __rdtsc() + 1000);
+      _umwait(1, __rdtsc() + 8000);
       status = qpl_check_job(job);
       check_time++;
-  } while (status == QPL_STS_BEING_PROCESSED && check_time < 6000);
+  } while (status == QPL_STS_BEING_PROCESSED && check_time < 60000);
   
   qpl_fini_job(job);
-  qpl_job_pool.ReleaseJob(job_id);
   // std::cout << "wait qpl job: " << job_id << std::endl;
-  VELOX_DCHECK(status == QPL_STS_OK, "Check of QPL Job failed, status: {}", status);
+  if (job_id == dict_qpl_job_id) {
+    dict_qpl_job_status = status;
+  } else {
+    qpl_job_pool.ReleaseJob(job_id);
+  }
+  int id = syscall(SYS_gettid);
+  VELOX_DCHECK(status == QPL_STS_OK, "Check of QPL Job failed, status: {}, job_id: {}, sys_id: {}", status, job_id, id);
 }
 
 void PageReader::prepareDictionary_2(const PageHeader& pageHeader) {
@@ -921,7 +930,7 @@ void PageReader::makeDecoder(PageHeader pageHeader) {
       // dictionaryIdDecoder_ = std::make_unique<RleBpDataDecoder>(
           // pageData_ + 1, pageData_ + encodedDataSize_, pageData_[0]);
       dictionaryIdDecoder_ = std::make_unique<DeflateRleBpDecoder>(
-          dataPageData_, pageHeader, dictPageData_, dictionaryPageHeader_, type_);          
+          dataPageData_, pageHeader, type_, pool_);          
       break;
     case Encoding::PLAIN:
       switch (parquetType) {

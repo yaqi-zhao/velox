@@ -39,7 +39,7 @@
 #include "velox/functions/prestosql/aggregates/RegisterAggregateFunctions.h"
 #include "velox/functions/prestosql/registration/RegistrationFunctions.h"
 #include "velox/parse/TypeResolver.h"
-// #include "velox/dwio/parquet/qpl_reader/PageReader.h"
+#include "velox/dwio/common/QplJobPool.h"
 
 #include <sys/time.h>
 
@@ -461,99 +461,121 @@ class TpchBenchmark {
 
 TpchBenchmark benchmark;
 
-BENCHMARK(q1) {
-  const auto planContext = queryBuilder->getQueryPlan(1);
+// BENCHMARK(q1) {
+//   const auto planContext = queryBuilder->getQueryPlan(1);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q3) {
+//   const auto planContext = queryBuilder->getQueryPlan(3);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q5) {
+//   const auto planContext = queryBuilder->getQueryPlan(5);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q6) {
+//   const auto planContext = queryBuilder->getQueryPlan(6);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q7) {
+//   const auto planContext = queryBuilder->getQueryPlan(7);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q8) {
+//   const auto planContext = queryBuilder->getQueryPlan(8);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q9) {
+//   const auto planContext = queryBuilder->getQueryPlan(9);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q10) {
+//   const auto planContext = queryBuilder->getQueryPlan(10);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q12) {
+//   const auto planContext = queryBuilder->getQueryPlan(12);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q13) {
+//   const auto planContext = queryBuilder->getQueryPlan(13);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q14) {
+//   const auto planContext = queryBuilder->getQueryPlan(14);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q15) {
+//   const auto planContext = queryBuilder->getQueryPlan(15);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q16) {
+//   const auto planContext = queryBuilder->getQueryPlan(16);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q17) {
+//   const auto planContext = queryBuilder->getQueryPlan(17);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q18) {
+//   const auto planContext = queryBuilder->getQueryPlan(18);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q19) {
+//   const auto planContext = queryBuilder->getQueryPlan(19);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q20) {
+//   const auto planContext = queryBuilder->getQueryPlan(20);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q21) {
+//   const auto planContext = queryBuilder->getQueryPlan(21);
+//   benchmark.run(planContext);
+// }
+
+// BENCHMARK(q22) {
+//   const auto planContext = queryBuilder->getQueryPlan(22);
+//   benchmark.run(planContext);
+// }
+
+BENCHMARK(q23) {
+  const auto planContext = queryBuilder->getQueryPlan(23);
   benchmark.run(planContext);
 }
 
-BENCHMARK(q3) {
-  const auto planContext = queryBuilder->getQueryPlan(3);
+BENCHMARK(q24) {
+  const auto planContext = queryBuilder->getQueryPlan(24);
   benchmark.run(planContext);
 }
 
-BENCHMARK(q5) {
-  const auto planContext = queryBuilder->getQueryPlan(5);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q6) {
-  const auto planContext = queryBuilder->getQueryPlan(6);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q7) {
-  const auto planContext = queryBuilder->getQueryPlan(7);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q8) {
-  const auto planContext = queryBuilder->getQueryPlan(8);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q9) {
-  const auto planContext = queryBuilder->getQueryPlan(9);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q10) {
-  const auto planContext = queryBuilder->getQueryPlan(10);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q12) {
-  const auto planContext = queryBuilder->getQueryPlan(12);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q13) {
-  const auto planContext = queryBuilder->getQueryPlan(13);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q14) {
-  const auto planContext = queryBuilder->getQueryPlan(14);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q15) {
-  const auto planContext = queryBuilder->getQueryPlan(15);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q16) {
-  const auto planContext = queryBuilder->getQueryPlan(16);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q17) {
-  const auto planContext = queryBuilder->getQueryPlan(17);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q18) {
-  const auto planContext = queryBuilder->getQueryPlan(18);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q19) {
-  const auto planContext = queryBuilder->getQueryPlan(19);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q20) {
-  const auto planContext = queryBuilder->getQueryPlan(20);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q21) {
-  const auto planContext = queryBuilder->getQueryPlan(21);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q22) {
-  const auto planContext = queryBuilder->getQueryPlan(22);
-  benchmark.run(planContext);
+void run_benchmark(int query_id) {
+  const auto queryPlan = queryBuilder->getQueryPlan(FLAGS_run_query_verbose);
+  const auto [cursor, actualResults] = benchmark.run(queryPlan);
+  if (!cursor) {
+    LOG(ERROR) << "Query terminated with error. Exiting";
+    exit(1);
+  }
+  auto task = cursor->task();
+  ensureTaskCompletion(task.get());  
+  return;
 }
 
 int tpchBenchmarkMain() {
@@ -570,3 +592,4 @@ int tpchBenchmarkMain() {
   queryBuilder.reset();
   return 0;
 }
+// }
