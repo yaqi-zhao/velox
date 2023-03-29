@@ -37,8 +37,8 @@ using namespace facebook::velox::parquet;
 using namespace facebook::velox::test;
 
 const uint32_t kNumRowsPerBatch = 60000;
-const uint32_t kNumBatches = 50;
-const uint32_t kNumRowsPerRowGroup = 10000;
+const uint32_t kNumBatches = 500;
+const uint32_t kNumRowsPerRowGroup = 60000;
 const double kFilterErrorMargin = 0.2;
 
 
@@ -57,7 +57,7 @@ class ParquetReaderBenchmark {
           ::parquet::WriterProperties::Builder().disable_dictionary()->build();
     } else {
       // The parquet file is in dictionary encoding format.
-      writerProperties = ::parquet::WriterProperties::Builder().compression(::parquet::Compression::SNAPPY)->build();
+      writerProperties = ::parquet::WriterProperties::Builder().compression(::parquet::Compression::QPL)->build();
     }
     writer_ = std::make_unique<facebook::velox::parquet::Writer>(
         std::move(sink), *pool_, 10000, writerProperties);
@@ -230,15 +230,6 @@ class ParquetReaderBenchmark {
     // Filter range is generated from a small sample data of 4096 rows. So the
     // upperBound and lowerBound are introduced to estimate the result size.
     auto resultSize = read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
-    read(parquetReaderType, rowType, scanSpec, nextSize);
 
     // Add one to expected to avoid 0 in calculating upperBound and lowerBound.
     int expected = kNumBatches * kNumRowsPerBatch *

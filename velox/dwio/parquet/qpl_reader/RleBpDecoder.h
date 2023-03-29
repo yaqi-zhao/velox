@@ -84,17 +84,12 @@ class RleBpDecoder {
           dwio::common::unpack<T>(
               reinterpret_cast<const uint8_t*&>(bufferStart_),
               bufferEnd_ - bufferStart_,
-#ifndef VELOX_ENABLE_QPL
               numValuesToRead & 0xfffffff8,
-#else
-              numValuesToRead,
-#endif                            
               bitWidth_,
               reinterpret_cast<T * FOLLY_NONNULL&>(outputBuffer),
               qpl_job_ids);
           remainingValues_ -= (numValuesToRead & 0xfffffff8);
 
-#ifndef VELOX_ENABLE_QPL          
           // Unpack the next 8 values to remainingUnpackedValues_ if necessary
           if ((numValuesToRead & 7) != 0) {
             T* output = reinterpret_cast<T*>(remainingUnpackedValues_);
@@ -110,7 +105,6 @@ class RleBpDecoder {
             copyRemainingUnpackedValues(outputBuffer, numValuesToRead & 7);
             remainingValues_ -= 8;
           }
-#endif          
         }
 
         numValues -= numValuesToRead;
@@ -118,20 +112,6 @@ class RleBpDecoder {
       }
     }
 
-#ifdef VELOX_ENABLE_QPL
-    facebook::velox::dwio::common::QplJobHWPool& qpl_job_pool = facebook::velox::dwio::common::QplJobHWPool::GetInstance();
-    for (int i = 0; i < qpl_job_ids.size(); i++) {
-      if (qpl_job_pool.job_status(qpl_job_ids[i])) {
-        auto status = qpl_wait_job(qpl_job_pool.GetJobById(qpl_job_ids[i]));
-        if (status != QPL_STS_OK) {
-          std::cout << "qpl execution error: " << status << std::endl;
-        }
-        
-        qpl_fini_job(qpl_job_pool.GetJobById(qpl_job_ids[i]));
-        qpl_job_pool.ReleaseJob(qpl_job_ids[i]);
-      }
-    }
-#endif    
   }
 
   /// Copies 'numValues' bits from the encoding into 'buffer',
