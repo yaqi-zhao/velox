@@ -51,10 +51,6 @@ class QplJobHWPool {
   /// \brief Return if the QPL job is allocated sucessfully.
   const bool& job_ready() { return iaa_job_ready; }
 
-  bool job_status(uint32_t job_id) {
-    return job_ptr_locks[job_id];
-  }
-
   qpl_job* GetJobById(uint32_t job_id) {
     return hw_job_ptr_pool[job_id];
   }
@@ -68,19 +64,15 @@ class QplJobHWPool {
   bool AllocateQPLJob();
 
   /// Max jobs in QPL_JOB_POOL
-  static constexpr auto MAX_JOB_NUMBER = 256;
+  static constexpr auto MAX_JOB_NUMBER = 1024;
   /// Entire buffer for storing all job objects
   static std::unique_ptr<uint8_t[]> hw_jobs_buffer;
   /// Job pool for storing all job object pointers
   static std::array<qpl_job*, MAX_JOB_NUMBER> hw_job_ptr_pool;
 
   /// Locks for accessing each job object pointers
-  static std::vector<bool> job_ptr_locks;
   static bool iaa_job_ready;
-  std::mt19937 random_engine;
-  std::uniform_int_distribution<int> distribution;
-  std::uniform_int_distribution<int> distribution_deflate;
-  std::mutex job_lock;
+  static std::array<std::atomic<bool>, MAX_JOB_NUMBER> hw_job_ptr_locks;
 };
 
 }

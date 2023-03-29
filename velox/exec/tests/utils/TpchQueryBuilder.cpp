@@ -2184,10 +2184,7 @@ const std::unordered_map<std::string, std::vector<std::string>>
             tpch::getTableSchema(tpch::Table::TBL_TEST)->names()),
         std::make_pair(
             "test_snappy",
-            tpch::getTableSchema(tpch::Table::TBL_TEST_SNAPPY)->names()),            
-        std::make_pair(
-            "lineorder_flat_2",
-            tpch::getTableSchema(tpch::Table::TBL_LINEORDER_FLAT_2)->names()),                        
+            tpch::getTableSchema(tpch::Table::TBL_TEST_SNAPPY)->names()),                                
         std::make_pair(
             "partsupp",
             tpch::getTableSchema(tpch::Table::TBL_PARTSUPP)->names())};
