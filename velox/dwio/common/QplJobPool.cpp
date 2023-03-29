@@ -17,14 +17,14 @@
 
 #include "velox/dwio/common/QplJobPool.h"
 #include "velox/common/base/Exceptions.h"
+#include <folly/Random.h>
 
 #ifdef VELOX_ENABLE_QPL
 
 namespace facebook::velox::dwio::common {
 
 std::array<qpl_job*, QplJobHWPool::MAX_JOB_NUMBER> QplJobHWPool::hw_job_ptr_pool;
-std::vector<bool> QplJobHWPool::job_ptr_locks;
-// std::array<uint32_t, QplJobHWPool::MAX_JOB_NUMBER> QplJobHWPool::job_ptr_locks;
+std::array<std::atomic<bool>, QplJobHWPool::MAX_JOB_NUMBER> QplJobHWPool::hw_job_ptr_locks;
 bool QplJobHWPool::iaa_job_ready = false;
 std::unique_ptr<uint8_t[]> QplJobHWPool::hw_jobs_buffer;
 
@@ -34,9 +34,7 @@ QplJobHWPool& QplJobHWPool::GetInstance() {
 }
 
 QplJobHWPool::QplJobHWPool()
-    : random_engine(std::random_device()()), distribution(0, MAX_JOB_NUMBER / 2),
-    distribution_deflate(MAX_JOB_NUMBER / 2 + 1, MAX_JOB_NUMBER - 1), job_lock() {
-  job_ptr_locks.reserve(MAX_JOB_NUMBER);
+{
   (void)AllocateQPLJob();
 }
 
@@ -72,9 +70,8 @@ bool QplJobHWPool::AllocateQPLJob() {
           "is properly set up!");
         return false;
     }
-    // _tpause(1, __rdtsc() + 1000);
-    hw_job_ptr_pool[index] = qpl_job_ptr;
-    job_ptr_locks[index] = false;
+    this->hw_job_ptr_pool[index] = qpl_job_ptr;
+    hw_job_ptr_locks[index].store(false);    
   }
 
   iaa_job_ready = true;
@@ -86,11 +83,9 @@ qpl_job* QplJobHWPool::AcquireJob(uint32_t& job_id) {
     return nullptr;
   }
   uint32_t retry = 0;
-  auto index = distribution(random_engine);
-  // auto index = distribution(0, 100);
+  auto index = folly::Random::rand32(0, MAX_JOB_NUMBER / 2);
   while (!tryLockJob(index)) {
-    index = distribution(random_engine);
-    // index = distribution(0, 100);
+    index = folly::Random::rand32(0, MAX_JOB_NUMBER / 2);
     retry++;
     if (retry > MAX_JOB_NUMBER) {
       return nullptr;
@@ -101,8 +96,6 @@ qpl_job* QplJobHWPool::AcquireJob(uint32_t& job_id) {
     return nullptr;
   }
 
-  // auto status = qpl_init_job(qpl_path, hw_job_ptr_pool[index]);
-  // VELOX_DCHECK_EQ(status, QPL_STS_OK, "QPL job initialization false");
   return hw_job_ptr_pool[index];
 }
 
@@ -111,11 +104,11 @@ qpl_job* QplJobHWPool::AcquireDeflateJob(uint32_t& job_id) {
     return nullptr;
   }
   uint32_t retry = 0;
-  auto index = distribution_deflate(random_engine);
+  auto index = folly::Random::rand32(MAX_JOB_NUMBER / 2 + 1, MAX_JOB_NUMBER - 1);
   while (!tryLockJob(index)) {
-    index = distribution_deflate(random_engine);
+    index = folly::Random::rand32(MAX_JOB_NUMBER / 2 + 1, MAX_JOB_NUMBER - 1);
     retry++;
-    if (retry > MAX_JOB_NUMBER) {
+    if (retry > MAX_JOB_NUMBER * 2) {
       return nullptr;
     }
   }
@@ -124,33 +117,20 @@ qpl_job* QplJobHWPool::AcquireDeflateJob(uint32_t& job_id) {
     return nullptr;
   }
 
-  // auto status = qpl_init_job(qpl_path, hw_job_ptr_pool[index]);
-  // VELOX_DCHECK_EQ(status, QPL_STS_OK, "QPL job initialization false"); 
   return hw_job_ptr_pool[index];
 }
 
 void QplJobHWPool::ReleaseJob(uint32_t job_id) {
-  if (job_id >= MAX_JOB_NUMBER) {
+    assert(job_id < MAX_JOB_NUMBER);
+    hw_job_ptr_locks[job_id].store(false);        
     return;
-  }
-  job_ptr_locks[job_id] = false;
-  return;
 }
 
 bool QplJobHWPool::tryLockJob(uint32_t index) {
-  bool expected = false;
-  if (index >= MAX_JOB_NUMBER) {
-    return false;
-  }
-  if (job_ptr_locks[index]) {
-    return false;
-  }
-  std::lock_guard<std::mutex> lock(this->job_lock);
-  if (!job_ptr_locks[index]) {
-    job_ptr_locks[index] = true;
-    return true;
-  }
-  return false;
+    bool expected = false;
+    assert(index < MAX_JOB_NUMBER);
+    return hw_job_ptr_locks[index].compare_exchange_strong(expected, true);
 }
+
 }
 #endif

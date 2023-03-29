@@ -109,9 +109,7 @@ std::string_view toTableName(Table table) {
     case Table::TBL_REGION:
       return "region";
     case Table::TBL_TEST:
-      return "test";  
-    case Table::TBL_LINEORDER_FLAT_2:
-      return "lineorder_flat_2";            
+      return "test";             
   }
   return ""; // make gcc happy.
 }

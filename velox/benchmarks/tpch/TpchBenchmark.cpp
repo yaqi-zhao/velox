@@ -361,7 +361,8 @@ int main(int argc, char** argv) {
     // sleep(10);
     auto startTime = std::chrono::system_clock::now();
     std::vector<std::thread> submite_threads(FLAGS_num_threads);
-    for (int i = 0; i < 800 / FLAGS_num_threads; i++) {
+    long ITER = 200;
+    for (int i = 0; i < ITER; i++) {
       for(int j = 0; j < submite_threads.size(); j++) {
         submite_threads[j] = std::thread(run_benchmark, FLAGS_run_query_verbose);
       }
@@ -373,8 +374,8 @@ int main(int argc, char** argv) {
     auto curTime = std::chrono::system_clock::now();
     size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
         curTime - startTime).count();
-    int qps = 800 * 1000000 / msElapsed;
-    printf("QueryBenchmark  q%d  concurrency_%d  time: %d us   QPS: %d\n", FLAGS_run_query_verbose, FLAGS_num_threads, (int)(msElapsed), qps);
+    int qps = ITER * FLAGS_num_threads * (long)1000000 / (long)msElapsed;
+    printf("QueryBenchmark  q%d  concurrency_%d drivers_%d time: %d us   QPS: %d\n", FLAGS_run_query_verbose, FLAGS_num_threads, FLAGS_num_drivers, (int)(msElapsed), qps);
   }
 }
 // }
