@@ -2,6 +2,7 @@
 
 #include <mutex>
 #include <atomic>
+#include "velox/common/base/Exceptions.h"
 //#include <stdatomic.h>
 //#include <stdbool.h>
 #include "velox/dwio/common/QplJobPool.h"
@@ -38,7 +39,6 @@ bool Initjobs(qpl_path_t execution_path){
       if (status != QPL_STS_OK) {
           throw std::runtime_error("An error acquired during compression job initializing.");
           return false;
-          //return Status::OK();
       }
     }
     mtx.unlock();
@@ -138,6 +138,7 @@ uint32_t Qplcodec::DecompressAsync(int64_t input_length, const uint8_t* input,
     dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
     uint32_t job_id = 0;
     qpl_job* job = qpl_job_pool.AcquireDeflateJob(job_id);
+    VELOX_DCHECK(job != nullptr, "Acquire QPL Deflate Job failed.");
     job->op = qpl_op_decompress;
     job->next_in_ptr = const_cast<uint8_t*>(input);
     job->next_out_ptr = output;

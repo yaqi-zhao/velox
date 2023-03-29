@@ -442,9 +442,8 @@ void PageReader::waitQplJob(uint32_t job_id) {
   // std::cout << "wait qpl job: " << job_id << std::endl;
   if (job_id == dict_qpl_job_id) {
     dict_qpl_job_status = status;
-  } else {
-    qpl_job_pool.ReleaseJob(job_id);
-  }
+  } 
+  qpl_job_pool.ReleaseJob(job_id);
   int id = syscall(SYS_gettid);
   VELOX_DCHECK(status == QPL_STS_OK, "Check of QPL Job failed, status: {}, job_id: {}, sys_id: {}", status, job_id, id);
 }

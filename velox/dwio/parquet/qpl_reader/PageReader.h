@@ -484,7 +484,6 @@ void PageReader::readWithVisitor(Visitor& visitor) {
   folly::Range<const vector_size_t*> pageRows;
   const uint64_t* nulls = nullptr;
   bool isMultiPage = false;
-  dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
   while (rowsForPage(reader, hasFilter, mayProduceNulls, pageRows, nulls)) {
     bool nullsFromFastPath = false;
     int32_t numValuesBeforePage = numRowsInReader<hasFilter>(reader);
@@ -500,7 +499,6 @@ void PageReader::readWithVisitor(Visitor& visitor) {
       scanState.dictionary = dictionary_;
     }
     scanState.updateRawState();
-    qpl_job_pool.ReleaseJob(dict_qpl_job_id);
     dict_qpl_job_id = 0;
 
     waitQplJob(decode_job_id);
