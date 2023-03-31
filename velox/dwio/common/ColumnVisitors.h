@@ -21,6 +21,7 @@
 #include "velox/dwio/common/DecoderUtil.h"
 #include "velox/dwio/common/SelectiveColumnReader.h"
 #include "velox/dwio/common/TypeUtil.h"
+#include "iostream"
 
 namespace facebook::velox::dwio::common {
 
@@ -1002,14 +1003,18 @@ class DictionaryColumnVisitor
         const T* dict_1 = reinterpret_cast<const T*>(state_.dictionary.values);
         const TIndex* idx_ptr = reinterpret_cast<const TIndex*>(input);
         TIndex idx = idx_ptr[i];
-#ifdef VELOX_ENABLE_QPL
-        uint32_t check_time = 0;
-        while (idx >= state_.dictionary.numValues && check_time < 60000) {
-          _tpause(1, __rdtsc() + 1000);
-          idx = idx_ptr[i];
-          check_time++;
+// #ifdef VELOX_ENABLE_QPL
+//         uint32_t check_time = 0;
+//         while (idx >= state_.dictionary.numValues && check_time < UINT32_MAX - 1) {
+//           _tpause(1, __rdtsc() + 1000);
+//           idx = idx_ptr[i];
+//           check_time++;
+//           std::cout << "idx error: idx " << (int)idx << "check time: " << check_time << std::endl;
+//         }
+// #endif        
+        if (idx >= state_.dictionary.numValues) {
+           throw std::runtime_error("Qpl output buffer is invalid: idx >= state_.dictionary.numValues ");
         }
-#endif        
         value = dict_1[idx];
       }
       if (scatter) {

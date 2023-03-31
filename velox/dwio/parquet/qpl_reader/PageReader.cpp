@@ -436,7 +436,8 @@ void PageReader::waitQplJob(uint32_t job_id) {
       _umwait(1, __rdtsc() + 8000);
       status = qpl_check_job(job);
       check_time++;
-  } while (status == QPL_STS_BEING_PROCESSED && check_time < 60000);
+      // std::cout << "wait job check_time: " << (int)check_time << ", status: " << (int)status << std::endl;
+  } while (status == QPL_STS_BEING_PROCESSED && check_time < UINT32_MAX - 1);
   
   qpl_fini_job(job);
   // std::cout << "wait qpl job: " << job_id << std::endl;
@@ -446,6 +447,10 @@ void PageReader::waitQplJob(uint32_t job_id) {
   qpl_job_pool.ReleaseJob(job_id);
   int id = syscall(SYS_gettid);
   VELOX_DCHECK(status == QPL_STS_OK, "Check of QPL Job failed, status: {}, job_id: {}, sys_id: {}", status, job_id, id);
+  if (status != QPL_STS_OK) {
+    throw std::runtime_error(
+      "Check of QPL Job failed, status:" + std::to_string(status) + " job_id: " + std::to_string(job_id));
+  }
 }
 
 void PageReader::prepareDictionary_2(const PageHeader& pageHeader) {

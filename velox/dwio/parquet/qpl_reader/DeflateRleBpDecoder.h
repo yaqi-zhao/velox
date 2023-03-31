@@ -216,6 +216,7 @@ class DeflateRleBpDecoder {
         facebook::velox::dwio::common::ensureCapacity<TValues>(decoded_values_, pageHeader_.data_page_header.num_values, &pool_);
         decoded_values_->setSize(pageHeader_.data_page_header.num_values * sizeof(TValues));
         out_ptr = decoded_values_->asMutable<uint8_t>();
+        // std::cout << "numRows: " << numRows << ", pageHeader_.data_page_header.num_values" << pageHeader_.data_page_header.num_values << std::endl;
       } else {
         out_ptr = reinterpret_cast<uint8_t*>(values);
       }
@@ -241,7 +242,18 @@ class DeflateRleBpDecoder {
     job->flags   = QPL_FLAG_DECOMPRESS_ENABLE | QPL_FLAG_FIRST | QPL_FLAG_LAST;
 
     auto status = qpl_submit_job(job);
+    uint32_t check_time = 0;
+    while (status == QPL_STS_QUEUES_ARE_BUSY_ERR && check_time < UINT32_MAX - 1) {
+      _umwait(1, __rdtsc() + 7000);
+      check_time++;
+      status = qpl_submit_job(job);
+      std::cout << "submit deflate+prle decode job error : check_time " << check_time << ", status: " << (int)status << std::endl;
+    }
     VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed, status {}, job_id {}", status, (int)job_id);
+    if (status != QPL_STS_OK) {
+    throw std::runtime_error(
+        "submition of QPL Job failed, status:" + std::to_string(status) + " job_id: " + std::to_string(job_id));
+    }
 
     // int id = syscall(SYS_gettid);
     // std::cout << "submit decode job: " << (int)job_id << ", sys id: " << id << std::endl;
@@ -262,6 +274,7 @@ class DeflateRleBpDecoder {
       auto filterHits = hasFilter ? visitor.outputRows(numRows) : nullptr;
       TValues* input;
       if (decoded_values_ != NULL) {
+        // std::cout << "decode is no null" << std::endl;
         input = decoded_values_->asMutable<TValues>() + cur_visitor_pos;
         cur_visitor_pos += numAllRows;
         memcpy((void*)values, input, numAllRows * sizeof(TValues));

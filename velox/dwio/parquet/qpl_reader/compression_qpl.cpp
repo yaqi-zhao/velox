@@ -6,6 +6,7 @@
 //#include <stdatomic.h>
 //#include <stdbool.h>
 #include "velox/dwio/common/QplJobPool.h"
+#include "velox/vector/BaseVector.h"
 
 #ifdef VELOX_ENABLE_QPL  
 
@@ -139,6 +140,9 @@ uint32_t Qplcodec::DecompressAsync(int64_t input_length, const uint8_t* input,
     uint32_t job_id = 0;
     qpl_job* job = qpl_job_pool.AcquireDeflateJob(job_id);
     VELOX_DCHECK(job != nullptr, "Acquire QPL Deflate Job failed.");
+    if (job == nullptr) {
+        throw std::runtime_error("Acquire QPL Deflate Job failed. ");
+    }
     job->op = qpl_op_decompress;
     job->next_in_ptr = const_cast<uint8_t*>(input);
     job->next_out_ptr = output;
@@ -148,8 +152,15 @@ uint32_t Qplcodec::DecompressAsync(int64_t input_length, const uint8_t* input,
 
     //decompression
     qpl_status status = qpl_submit_job(job);
+    uint32_t check_time = 0;
+    while (status == QPL_STS_QUEUES_ARE_BUSY_ERR && check_time < UINT32_MAX - 1) {
+      _umwait(1, __rdtsc() + 8000);
+      check_time++;
+      status = qpl_submit_job(job);
+      // std::cout << "submit decompress job error : check_time " << check_time << ", status: " << (int)status << std::endl;
+    }
     if (status != QPL_STS_OK) {
-        throw std::runtime_error("Error while decompression occurred.");
+        throw std::runtime_error("Error while decompression occurred. Status: " + std::to_string(status));
         std::atomic_store(&job_status[job_id],false);
     } else {
       return job_id;
