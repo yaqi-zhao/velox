@@ -211,6 +211,8 @@ TpchPlan TpchQueryBuilder::getQ23Plan() const {
                       {})
                   .capturePlanNodeId(lineitemPlanNodeId)
                   .project({"column_1"})
+                  .partialAggregation({}, {"count(column_1)"})
+                  .finalAggregation()
                   .localPartition({})
                   .planNode();
 
@@ -280,6 +282,8 @@ TpchPlan TpchQueryBuilder::getQ25Plan() const {
                       {})
                   .capturePlanNodeId(lineitemPlanNodeId)
                   .project({"column_1"})
+                  .partialAggregation({}, {"count(column_1)"})
+                  .finalAggregation()
                   .localPartition({})
                   .planNode();
 

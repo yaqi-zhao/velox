@@ -47,6 +47,7 @@ enum class Table : uint8_t {
   TBL_TEST,
   TBL_TEST_SNAPPY,
   TBL_LINEORDER_FLAT_2,
+  TBL_LINEORDER_FLAT,
 };
 
 /// Returns table name as a string.
