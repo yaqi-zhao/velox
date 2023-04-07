@@ -134,6 +134,7 @@ class TpchQueryBuilder {
   static constexpr const char* kTest = "test";
   static constexpr const char* kTestSnappy = "test_snappy";
   static constexpr const char* kLineorderFlat2 = "lineorder_flat_2";
+  static constexpr const char* kLineorderFlat = "lineorder_flat";
   std::shared_ptr<memory::MemoryPool> pool_ = memory::getDefaultMemoryPool();
 };
 

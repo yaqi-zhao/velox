@@ -1,4 +1,7 @@
 #include "compression_qpl.h"
+#include "velox/dwio/common/QplJobPool.h"
+#include "velox/common/base/Exceptions.h"
+#include "velox/vector/BaseVector.h"
 
 #include <mutex>
 #include <atomic>
@@ -7,6 +10,7 @@
 
 #ifdef VELOX_ENABLE_QPL  
 
+namespace facebook::velox::parquet {
 #define job_size 100
 static qpl_job *job_pool[job_size];
 std::atomic<bool> job_status[job_size];
@@ -120,6 +124,50 @@ bool Qplcodec::Decompress(int64_t input_length, const uint8_t* input,
       std::atomic_store(&job_status[job_id],false);
       return true;
     }
+}
+
+uint32_t Qplcodec::DecompressAsync(int64_t input_length, const uint8_t* input,
+                             int64_t output_buffer_length, uint8_t* output)  {
+    if (output_buffer_length == 0) {
+      // The zlib library does not allow *output to be NULL, even when
+      // output_buffer_length is 0 (inflate() will return Z_STREAM_ERROR). We don't
+      // consider this an error, so bail early if no output is expected. Note that we
+      // don't signal an error if the input actually contains compressed data.
+      return 0;
+    }
+
+    // Reset the stream for this block
+    dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
+    uint32_t job_id = 0;
+    qpl_job* job = qpl_job_pool.AcquireDeflateJob(job_id);
+    VELOX_DCHECK(job != nullptr, "Acquire QPL Deflate Job failed.");
+    if (job == nullptr) {
+        throw std::runtime_error("Acquire QPL Deflate Job failed. ");
+    }
+    job->op = qpl_op_decompress;
+    job->next_in_ptr = const_cast<uint8_t*>(input);
+    job->next_out_ptr = output;
+    job->available_in = input_length;
+    job->available_out = output_buffer_length;
+    job->flags = QPL_FLAG_FIRST | QPL_FLAG_LAST;
+    job->numa_id = 1;
+
+    //decompression
+    qpl_status status = qpl_submit_job(job);
+    uint32_t check_time = 0;
+    while (status == QPL_STS_QUEUES_ARE_BUSY_ERR && check_time < UINT32_MAX - 1) {
+      _umwait(1, __rdtsc() + 8000);
+      check_time++;
+      status = qpl_submit_job(job);
+      // std::cout << "submit decompress job error : check_time " << check_time << ", status: " << (int)status << std::endl;
+    }
+    if (status != QPL_STS_OK) {
+        throw std::runtime_error("Error while decompression occurred. Status: " + std::to_string(status));
+        std::atomic_store(&job_status[job_id],false);
+    } else {
+      return job_id;
+    }
+}
 
 }
 #endif

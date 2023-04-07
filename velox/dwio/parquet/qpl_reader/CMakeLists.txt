@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+if(VELOX_ENABLE_QPL)
 add_library(
   velox_dwio_qpl_parquet_reader
   NestedStructureDecoder.cpp
@@ -52,3 +53,4 @@ target_link_libraries(
   parquet
   thrift
   ${FMT})
+endif()

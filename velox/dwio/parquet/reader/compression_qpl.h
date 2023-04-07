@@ -4,6 +4,7 @@
 #ifdef VELOX_ENABLE_QPL  
 #include <qpl/qpl.h>
 
+namespace facebook::velox::parquet {
 bool Initjobs(qpl_path_t execute_path);
 class Qplcodec{
 public:
@@ -17,6 +18,8 @@ public:
   //bool Freejob();
   bool Decompress(int64_t input_length, const uint8_t* input,
                              int64_t output_buffer_length, uint8_t* output);
+  uint32_t DecompressAsync(int64_t input_length, const uint8_t* input,
+                             int64_t output_buffer_length, uint8_t* output);                             
   bool Compress(int64_t input_length, const uint8_t* input,
                              int64_t output_buffer_length, uint8_t* output);                        
 
@@ -27,5 +30,5 @@ private:
   int idx_;
   
 };
-
+}
 #endif
