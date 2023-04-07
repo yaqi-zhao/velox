@@ -166,7 +166,6 @@ uint32_t Qplcodec::DecompressAsync(int64_t input_length, const uint8_t* input,
     } else {
       return job_id;
     }
-
 }
 
 } // namespace
