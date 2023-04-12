@@ -299,7 +299,7 @@ RowTypePtr getTableSchema(Table table) {
           });
       return type;
     }    
-    case Table::TBL_LINEORDER_FLAT_2: {
+    case Table::TBL_LINEORDER_FLAT: {
       static RowTypePtr type = ROW(
           {
             "lo_orderkey",
@@ -347,7 +347,7 @@ RowTypePtr getTableSchema(Table table) {
               INTEGER(),
               INTEGER(),
               INTEGER(),
-              INTEGER(),
+              DATE(),
               VARCHAR(),
               INTEGER(),
               INTEGER(),
@@ -383,7 +383,7 @@ RowTypePtr getTableSchema(Table table) {
           });
       return type;
     }      
-    case Table::TBL_LINEORDER_FLAT: {
+    case Table::TBL_LINEORDER_FLAT_2: {
       static RowTypePtr type = ROW(
           {
             "lo_orderkey",

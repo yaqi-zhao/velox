@@ -32,5 +32,5 @@ target_link_libraries(
   velox_dwio_native_parquet_reader xsimd)
 
 if(VELOX_ENABLE_QPL)  
-  target_link_libraries(velox_dwio_qpl_parquet_reader xsimd)
+  target_link_libraries(velox_dwio_parquet_reader velox_dwio_qpl_parquet_reader)
 endif()
