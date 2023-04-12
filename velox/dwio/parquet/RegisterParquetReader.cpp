@@ -17,7 +17,7 @@
 #include "velox/dwio/parquet/RegisterParquetReader.h"
 
 #include "velox/dwio/parquet/duckdb_reader/ParquetReader.h"
-#include "velox/dwio/parquet/qpl_reader/ParquetReader.h"
+// #include "velox/dwio/parquet/qpl_reader/ParquetReader.h"
 #include "velox/dwio/parquet/reader/ParquetReader.h"
 
 namespace facebook::velox::parquet {
@@ -31,13 +31,7 @@ void registerParquetReaderFactory(ParquetReaderType parquetReaderType) {
     case ParquetReaderType::NATIVE:
       dwio::common::registerReaderFactory(
           std::make_shared<ParquetReaderFactory>());
-      break;
-#ifdef VELOX_ENABLE_QPL      
-    case ParquetReaderType::QPL:
-      dwio::common::registerReaderFactory(
-          std::make_shared<qpl_reader::ParquetReaderFactory>());
-      break;
-#endif           
+      break;       
     default:
       VELOX_UNSUPPORTED(
           "Velox does not support ParquetReaderType ", parquetReaderType);

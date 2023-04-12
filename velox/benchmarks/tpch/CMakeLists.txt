@@ -62,10 +62,3 @@ target_link_libraries(
   ${FMT})
 
 
-if(VELOX_ENABLE_QPL)  
-  target_link_libraries(velox_tpch_benchmark velox_dwio_qpl_parquet_reader)
-endif()
-
-if(VELOX_ENABLE_QPL)  
-  target_link_libraries(velox_ssb_benchmark velox_dwio_qpl_parquet_reader)
-endif()
