@@ -23,7 +23,7 @@ namespace facebook::velox::exec::test {
 
 /// Contains the query plan and input data files keyed on source plan node ID.
 /// All data files use the same file format specified in 'dataFileFormat'.
-struct TpchPlan {
+struct SsbPlan {
   core::PlanNodePtr plan;
   std::unordered_map<core::PlanNodeId, std::vector<std::string>> dataFiles;
   dwio::common::FileFormat dataFileFormat;
@@ -35,7 +35,7 @@ struct TpchPlan {
 /// Example: If the file has a 'returnflag' column, the corresponding type name
 /// will be 'l_returnflag'. fileColumnNames store the mapping between standard
 /// names and the corresponding name in the file.
-struct TpchTableMetadata {
+struct SsbTableMetadata {
   RowTypePtr type;
   std::vector<std::string> dataFiles;
   std::unordered_map<std::string, std::string> fileColumnNames;
@@ -59,9 +59,9 @@ struct TpchTableMetadata {
 /// Since the column names in the file can vary, they are mapped to the standard
 /// names. Therefore, the order of the columns in the file is important and
 /// should be in the same order as in the TPC-H standard.
-class TpchQueryBuilder {
+class SsbQueryBuilder {
  public:
-  explicit TpchQueryBuilder(dwio::common::FileFormat format)
+  explicit SsbQueryBuilder(dwio::common::FileFormat format)
       : format_(format) {}
 
   /// Read each data file, initialize row types, and determine data paths for
@@ -71,38 +71,17 @@ class TpchQueryBuilder {
 
   /// Get the query plan for a given TPC-H query number.
   /// @param queryId TPC-H query number
-  TpchPlan getQueryPlan(int queryId) const;
+  SsbPlan getQueryPlan(int queryId) const;
 
   /// Get the TPC-H table names present.
   static const std::vector<std::string>& getTableNames();
 
  private:
-  TpchPlan getQ1Plan() const;
-  TpchPlan getQ3Plan() const;
-  TpchPlan getQ5Plan() const;
-  TpchPlan getQ6Plan() const;
-  TpchPlan getQ7Plan() const;
-  TpchPlan getQ8Plan() const;
-  TpchPlan getQ9Plan() const;
-  TpchPlan getQ10Plan() const;
-  TpchPlan getQ12Plan() const;
-  TpchPlan getQ13Plan() const;
-  TpchPlan getQ14Plan() const;
-  TpchPlan getQ15Plan() const;
-  TpchPlan getQ16Plan() const;
-  TpchPlan getQ17Plan() const;
-  TpchPlan getQ18Plan() const;
-  TpchPlan getQ19Plan() const;
-  TpchPlan getQ20Plan() const;
-  TpchPlan getQ21Plan() const;
-  TpchPlan getQ22Plan() const;
-  TpchPlan getQ23Plan() const;
-  TpchPlan getQ24Plan() const;
-  TpchPlan getQ25Plan() const;
+  SsbPlan getQ1Plan() const;
+//   SsbPlan getQ3Plan() const;
+//   SsbPlan getQ5Plan() const;
 
-  TpchPlan getQ31Plan() const;
-  // TpchPlan getQ32Plan() const;
-  // TpchPlan getQ33Plan() const;
+  SsbPlan getQ31Plan() const;
 
   const std::vector<std::string>& getTableFilePaths(
       const std::string& tableName) const {
@@ -125,25 +104,17 @@ class TpchQueryBuilder {
     return tableMetadata_.at(tableName).fileColumnNames;
   }
 
-  std::unordered_map<std::string, TpchTableMetadata> tableMetadata_;
+  std::unordered_map<std::string, SsbTableMetadata> tableMetadata_;
   const dwio::common::FileFormat format_;
   static const std::unordered_map<std::string, std::vector<std::string>>
       kTables_;
   static const std::vector<std::string> kTableNames_;
 
-  static constexpr const char* kLineitem = "lineitem";
-  static constexpr const char* kCustomer = "customer";
-  static constexpr const char* kOrders = "orders";
-  static constexpr const char* kNation = "nation";
-  static constexpr const char* kRegion = "region";
-  static constexpr const char* kPart = "part";
-  static constexpr const char* kSupplier = "supplier";
-  static constexpr const char* kPartsupp = "partsupp";
-  static constexpr const char* kTest = "test";
-  static constexpr const char* kTestSnappy = "test_snappy";
+
   static constexpr const char* kLineorderFlat2 = "lineorder_flat_2";
   static constexpr const char* kLineorderFlat = "lineorder_flat";
   std::shared_ptr<memory::MemoryPool> pool_ = memory::getDefaultMemoryPool();
 };
 
 } // namespace facebook::velox::exec::test
+

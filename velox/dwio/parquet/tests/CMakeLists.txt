@@ -39,3 +39,9 @@ target_link_libraries(
   velox_hive_connector
   velox_aggregates
   ${TEST_LINK_LIBS})
+
+if(VELOX_ENABLE_QPL)
+target_link_libraries(
+  velox_dwio_parquet_tpch_test
+  velox_dwio_qpl_parquet_reader)
+endif()
