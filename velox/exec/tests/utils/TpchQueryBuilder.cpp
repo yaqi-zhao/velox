@@ -188,7 +188,7 @@ TpchPlan TpchQueryBuilder::getQueryPlan(int queryId) const {
     case 24:
       return getQ24Plan();
     case 25:
-      return getQ25Plan();             
+      return getQ25Plan();                   
     default:
       VELOX_NYI("TPC-H query {} is not supported yet", queryId);
   }
@@ -2188,7 +2188,10 @@ const std::unordered_map<std::string, std::vector<std::string>>
             tpch::getTableSchema(tpch::Table::TBL_TEST)->names()),
         std::make_pair(
             "test_snappy",
-            tpch::getTableSchema(tpch::Table::TBL_TEST_SNAPPY)->names()),                                
+            tpch::getTableSchema(tpch::Table::TBL_TEST_SNAPPY)->names()),
+        std::make_pair(
+            "lineorder_flat",
+            tpch::getTableSchema(tpch::Table::TBL_LINEORDER_FLAT)->names()),                                            
         std::make_pair(
             "partsupp",
             tpch::getTableSchema(tpch::Table::TBL_PARTSUPP)->names())};

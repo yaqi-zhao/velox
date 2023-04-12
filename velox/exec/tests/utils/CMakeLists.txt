@@ -25,6 +25,7 @@ add_library(
   PlanBuilder.cpp
   QueryAssertions.cpp
   SumNonPODAggregate.cpp
+  SsbQueryBuilder.cpp
   TpchQueryBuilder.cpp
   VectorTestUtil.cpp)
 
