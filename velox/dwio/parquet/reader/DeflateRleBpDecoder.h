@@ -299,5 +299,5 @@ class DeflateRleBpDecoder {
 
 };
 
-}  // namespace facebook::velox::parquet::qpl_reader
+}  // namespace facebook::velox::parquet::reader
 #endif
