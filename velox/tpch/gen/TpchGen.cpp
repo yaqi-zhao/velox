@@ -107,8 +107,6 @@ std::string_view toTableName(Table table) {
       return "nation";
     case Table::TBL_REGION:
       return "region";
-    case Table::TBL_TEST:
-      return "test";             
   }
   return ""; // make gcc happy.
 }
@@ -123,7 +121,6 @@ Table fromTableName(std::string_view tableName) {
       {"lineitem", Table::TBL_LINEITEM},
       {"nation", Table::TBL_NATION},
       {"region", Table::TBL_REGION},
-      {"test", Table::TBL_TEST},
   };
 
   auto it = map.find(tableName);
@@ -151,6 +148,8 @@ size_t getRowCount(Table table, double scaleFactor) {
       return 25;
     case Table::TBL_REGION:
       return 5;
+    case Table::TBL_LINEORDER_FLAT:
+      return getLineItemRowCount(scaleFactor);      
     case Table::TBL_LINEITEM:
       return getLineItemRowCount(scaleFactor);
   }
@@ -278,27 +277,7 @@ RowTypePtr getTableSchema(Table table) {
               VARCHAR(),
           });
       return type;
-    }
-    case Table::TBL_TEST: {
-      static RowTypePtr type = ROW(
-          {
-            "column_1",
-          },
-          {
-              INTEGER(),
-          });
-      return type;
-    }
-    case Table::TBL_TEST_SNAPPY: {
-      static RowTypePtr type = ROW(
-          {
-            "column_1",
-          },
-          {
-              INTEGER(),
-          });
-      return type;
-    }    
+    } 
     case Table::TBL_LINEORDER_FLAT: {
       static RowTypePtr type = ROW(
           {
@@ -340,6 +319,7 @@ RowTypePtr getTableSchema(Table table) {
             "p_type",
             "p_size",
             "p_container",
+            "lo_orderyear",
           },
           {
               INTEGER(),
@@ -351,50 +331,39 @@ RowTypePtr getTableSchema(Table table) {
               VARCHAR(),
               INTEGER(),
               INTEGER(),
-              BIGINT(),
-              INTEGER(),
-              BIGINT(),
               INTEGER(),
               INTEGER(),
               INTEGER(),
               INTEGER(),
+              INTEGER(),
+              INTEGER(),
+              DATE(),
               VARCHAR(),
               VARCHAR(),
               VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
+              INTEGER(),
+              INTEGER(),
+              INTEGER(),
               VARCHAR(),
               VARCHAR(),
               VARCHAR(),
               VARCHAR(),
               INTEGER(),
+              INTEGER(),
+              INTEGER(),
               VARCHAR(),
+              VARCHAR(),
+              VARCHAR(),
+              INTEGER(),
+              VARCHAR(),
+              INTEGER(),
+              VARCHAR(),
+              INTEGER(),
+              VARCHAR(),
+              INTEGER(),
           });
       return type;
-    }      
-    case Table::TBL_LINEORDER_FLAT_2: {
-      static RowTypePtr type = ROW(
-          {
-            "lo_orderkey",
-            "lo_custkey",   
-          },
-          {
-              BIGINT(),
-              BIGINT(),
-          });
-      return type;
-    }          
+    }     
     case Table::TBL_LINEITEM: {
       static RowTypePtr type = ROW(
           {

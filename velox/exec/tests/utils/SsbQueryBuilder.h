@@ -78,9 +78,20 @@ class SsbQueryBuilder {
 
  private:
   SsbPlan getQ1Plan() const;
-//   SsbPlan getQ3Plan() const;
-//   SsbPlan getQ5Plan() const;
+  SsbPlan getQ2Plan() const;
+  SsbPlan getQ3Plan() const;
+  SsbPlan getQ4Plan() const;
+  SsbPlan getQ5Plan() const;
+  SsbPlan getQ6Plan() const;
+  SsbPlan getQ7Plan() const;
+  SsbPlan getQ8Plan() const;
+  SsbPlan getQ9Plan() const;
+  SsbPlan getQ10Plan() const;
+  SsbPlan getQ11Plan() const;
+  SsbPlan getQ12Plan() const;
+  SsbPlan getQ13Plan() const;
 
+  SsbPlan getQ30Plan() const;
   SsbPlan getQ31Plan() const;
 
   const std::vector<std::string>& getTableFilePaths(
@@ -91,9 +102,6 @@ class SsbQueryBuilder {
   std::shared_ptr<const RowType> getRowType(
       const std::string& tableName,
       const std::vector<std::string>& columnNames) const {
-    for (auto iter = tableMetadata_.begin(); iter != tableMetadata_.end(); iter++) {
-      std::cout << "table name: " << iter->first << std::endl;
-    }
     auto columnSelector = std::make_shared<dwio::common::ColumnSelector>(
         tableMetadata_.at(tableName).type, columnNames);
     return columnSelector->buildSelectedReordered();
@@ -111,9 +119,9 @@ class SsbQueryBuilder {
   static const std::vector<std::string> kTableNames_;
 
 
-  static constexpr const char* kLineorderFlat2 = "lineorder_flat_2";
   static constexpr const char* kLineorderFlat = "lineorder_flat";
-  std::shared_ptr<memory::MemoryPool> pool_ = memory::getDefaultMemoryPool();
+  std::shared_ptr<memory::MemoryPool> pool_ =
+      memory::addDefaultLeafMemoryPool();
 };
 
 } // namespace facebook::velox::exec::test

@@ -183,116 +183,10 @@ TpchPlan TpchQueryBuilder::getQueryPlan(int queryId) const {
       return getQ21Plan();
     case 22:
       return getQ22Plan();
-    case 23:
-      return getQ23Plan();
-    case 24:
-      return getQ24Plan();
-    case 25:
-      return getQ25Plan();                   
     default:
       VELOX_NYI("TPC-H query {} is not supported yet", queryId);
   }
 }
-
-TpchPlan TpchQueryBuilder::getQ23Plan() const {
-  std::vector<std::string> selectedColumns = {"column_1"};
-
-  const auto selectedRowType = getRowType(kTest, selectedColumns);
-  const auto& fileColumnNames = getFileColumnNames(kTest);
-
-  auto quantityFilter = "column_1 > 1";
-
-  core::PlanNodeId lineitemPlanNodeId;
-  auto plan = PlanBuilder()
-                  .tableScan(
-                      kTest,
-                      selectedRowType,
-                      fileColumnNames,
-                      {})
-                  .capturePlanNodeId(lineitemPlanNodeId)
-                  .project({"column_1"})
-                  .partialAggregation({}, {"count(column_1)"})
-                  .finalAggregation()
-                  .localPartition({})
-                  .planNode();
-
-//   auto plan = PlanBuilder()
-//                   .tableScan(
-//                       kTest,
-//                       selectedRowType,
-//                       fileColumnNames,
-//                       {})
-//                   .capturePlanNodeId(lineitemPlanNodeId)
-//                   .project({"column_1"})
-//                   .localPartition({})
-//                   .filter("column_1 > 30")
-//                   .planNode();
-
-  TpchPlan context;
-  context.plan = std::move(plan);
-  context.dataFiles[lineitemPlanNodeId] = getTableFilePaths(kTest);
-  context.dataFileFormat = format_;
-  return context;
-}
-
-
-
-TpchPlan TpchQueryBuilder::getQ24Plan() const {
-  std::vector<std::string> selectedColumns = {"lo_orderkey"};
-
-  const auto selectedRowType = getRowType(kLineorderFlat2, selectedColumns);
-  const auto& fileColumnNames = getFileColumnNames(kLineorderFlat2);
-
-  auto quantityFilter = "lo_orderkey > 1";
-
-  core::PlanNodeId lineitemPlanNodeId;
-  auto plan = PlanBuilder()
-                  .tableScan(
-                      kLineorderFlat2,
-                      selectedRowType,
-                      fileColumnNames,
-                      {})
-                  .capturePlanNodeId(lineitemPlanNodeId)
-                  .project({"lo_orderkey"})
-                  .partialAggregation({}, {"sum(lo_orderkey)"})
-                  .localPartition({})
-                  .finalAggregation()
-                  .planNode();
-  TpchPlan context;
-  context.plan = std::move(plan);
-  context.dataFiles[lineitemPlanNodeId] = getTableFilePaths(kLineorderFlat2);
-  context.dataFileFormat = format_;
-  return context;
-}
-
-TpchPlan TpchQueryBuilder::getQ25Plan() const {
-  std::vector<std::string> selectedColumns = {"column_1"};
-
-  const auto selectedRowType = getRowType(kTestSnappy, selectedColumns);
-  const auto& fileColumnNames = getFileColumnNames(kTestSnappy);
-
-  auto quantityFilter = "column_1 > 1";
-
-  core::PlanNodeId lineitemPlanNodeId;
-  auto plan = PlanBuilder()
-                  .tableScan(
-                      kTestSnappy,
-                      selectedRowType,
-                      fileColumnNames,
-                      {})
-                  .capturePlanNodeId(lineitemPlanNodeId)
-                  .project({"column_1"})
-                  .partialAggregation({}, {"count(column_1)"})
-                  .finalAggregation()
-                  .localPartition({})
-                  .planNode();
-
-  TpchPlan context;
-  context.plan = std::move(plan);
-  context.dataFiles[lineitemPlanNodeId] = getTableFilePaths(kTestSnappy);
-  context.dataFileFormat = format_;
-  return context;
-} 
 
 TpchPlan TpchQueryBuilder::getQ1Plan() const {
   std::vector<std::string> selectedColumns = {
@@ -2183,15 +2077,6 @@ const std::unordered_map<std::string, std::vector<std::string>>
         std::make_pair(
             "supplier",
             tpch::getTableSchema(tpch::Table::TBL_SUPPLIER)->names()),
-        std::make_pair(
-            "test",
-            tpch::getTableSchema(tpch::Table::TBL_TEST)->names()),
-        std::make_pair(
-            "test_snappy",
-            tpch::getTableSchema(tpch::Table::TBL_TEST_SNAPPY)->names()),
-        std::make_pair(
-            "lineorder_flat",
-            tpch::getTableSchema(tpch::Table::TBL_LINEORDER_FLAT)->names()),                                            
         std::make_pair(
             "partsupp",
             tpch::getTableSchema(tpch::Table::TBL_PARTSUPP)->names())};

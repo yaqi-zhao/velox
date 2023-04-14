@@ -86,24 +86,6 @@ class DeflateRleBpDecoder {
     return;
   }
   
-    template <bool hasNulls, typename Visitor>
-  void readWithVisitor(const uint64_t* FOLLY_NULLABLE nulls, Visitor visitor) {
-    if (useQplPath<hasNulls>(visitor)) {
-        constexpr bool hasFilter =
-            !std::is_same_v<typename Visitor::FilterType, common::AlwaysTrue>;
-        constexpr bool hasHook =
-            !std::is_same_v<typename Visitor::HookType, dwio::common::NoHook>;
-        auto rows = visitor.rows();
-        auto numRows = visitor.numRows();
-        auto rowsAsRange = folly::Range<const int32_t*>(rows, numRows);
-
-        bulkScan<hasFilter, hasHook, false>(rowsAsRange, nullptr, visitor);
-    } else {
-        std::cout << "not support yet!" << std::endl;
-    }
-    return;
-  }
-
   void skip(uint64_t numValues) {
     return;
   }
@@ -144,63 +126,6 @@ class DeflateRleBpDecoder {
 
 
   template <bool hasFilter, bool hasHook, bool scatter,  typename ColumnVisitor>
-  void bulkScan(folly::Range<const int32_t*> nonNullRows,
-      const int32_t* FOLLY_NULLABLE scatterRows,
-      ColumnVisitor& visitor) {
-      auto& reader = visitor.reader();
-
-      // Step1. uncompress + scan with mask data pate to get output vector
-      auto numRows = visitor.numRows();
-      auto numAllRows = visitor.numRows();
-      auto values = visitor.rawValues(numRows);
-      using TValues = typename std::remove_reference<decltype(values[0])>::type;
-      using TIndex = typename std::make_signed_t<typename dwio::common::make_index<TValues>::type>;
-      
-      dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
-      uint32_t job_id = 0;
-
-      qpl_job* job = qpl_job_pool.AcquireJob(job_id);
-
-      job->op=qpl_op_extract;
-      job->next_in_ptr=reinterpret_cast<uint8_t*>(const_cast<char*>(pageData_));
-      job->available_in=pageHeader_.compressed_page_size;
-      job->parser = qpl_p_parquet_rle;
-      job->param_low = 0;
-      job->param_high = numAllRows;
-      job->out_bit_width = qpl_ow_32;
-      job->next_out_ptr = reinterpret_cast<uint8_t*>(values);
-      job->available_out = static_cast<uint32_t>(numRows * sizeof(TIndex)); 
-      job->num_input_elements = numAllRows;
-      job->flags   = QPL_FLAG_DECOMPRESS_ENABLE | QPL_FLAG_FIRST | QPL_FLAG_LAST;
-
-      auto status = qpl_submit_job(job);
-      VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed");
-      do
-      {
-          _tpause(1, __rdtsc() + 1000);
-      } while (qpl_check_job(job) == QPL_STS_BEING_PROCESSED);
-      qpl_fini_job(qpl_job_pool.GetJobById(job_id));
-      qpl_fini_job(job);
-      qpl_job_pool.ReleaseJob(job_id);
-
-      // Step 2.  filter dictionary to get output
-      int32_t numValues = 0;
-      auto filterHits = hasFilter ? visitor.outputRows(numRows) : nullptr;
-      visitor.template processRun<hasFilter, hasHook, scatter>(
-          values,
-          numRows,
-          nullptr,
-          filterHits,
-          values,
-          numValues);
-      if (visitor.atEnd()) {
-        visitor.setNumValues(hasFilter ? numValues : numAllRows);
-        return;
-      }       
-
-  }
-
-  template <bool hasFilter, bool hasHook, bool scatter,  typename ColumnVisitor>
   uint32_t rleDecode(folly::Range<const int32_t*> nonNullRows,
       const int32_t* FOLLY_NULLABLE scatterRows,
       ColumnVisitor& visitor,
@@ -223,6 +148,7 @@ class DeflateRleBpDecoder {
       } else {
         out_ptr = reinterpret_cast<uint8_t*>(values);
       }
+      memset(out_ptr, 0, pageHeader_.data_page_header.num_values * sizeof(TValues));
     } else {
       return 0;
     }
@@ -244,6 +170,7 @@ class DeflateRleBpDecoder {
     job->num_input_elements = pageHeader_.data_page_header.num_values;
     job->flags   = QPL_FLAG_DECOMPRESS_ENABLE | QPL_FLAG_FIRST | QPL_FLAG_LAST;
     job->numa_id = 1;
+    // std::cout << "pageHeader_.compressed_page_size: " << pageHeader_.compressed_page_size << std::endl;
 
     auto status = qpl_submit_job(job);
     uint32_t check_time = 0;
@@ -284,17 +211,33 @@ class DeflateRleBpDecoder {
         memcpy((void*)values, input, numAllRows * sizeof(TValues));
       }
 
-      visitor.template processRun<hasFilter, hasHook, scatter>(
-          values,
-          numRows,
-          nullptr,
-          filterHits,
-          values,
-          numValues);
-      if (visitor.atEnd()) {
-        visitor.setNumValues(hasFilter ? numValues : numAllRows);
-        return;
-      }       
+  uint32_t check_time = 0;
+  while (check_time < 100) {
+    try {
+        visitor.template processRun<hasFilter, hasHook, scatter>(
+            values,
+            numRows,
+            nullptr,
+            filterHits,
+            values,
+            numValues);
+        if (visitor.atEnd()) {
+          visitor.setNumValues(hasFilter ? numValues : numAllRows);
+          return;
+        }  
+        return;     
+    } catch (const std::runtime_error& e) {
+      check_time++;
+      // We cannot throw an exception from the destructor. Warn instead.
+        if (decoded_values_ != NULL) {
+          // std::cout << "decode is no null" << std::endl;
+          input = decoded_values_->asMutable<TValues>() + cur_visitor_pos - numAllRows;
+          cur_visitor_pos += numAllRows;
+          memcpy((void*)values, input, numAllRows * sizeof(TValues));
+        }
+        std::cout << "check time: " << check_time << folly::to<std::string>(e.what()) << std::endl;
+    }
+  }      
   }  
 
 };
