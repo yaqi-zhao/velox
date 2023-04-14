@@ -156,7 +156,7 @@ class ParquetData : public dwio::common::FormatData {
   void readWithVisitor(Visitor visitor) {
 #ifdef VELOX_ENABLE_QPL    
     if (std::is_same_v<typename Visitor::DataType, int32_t> && qplReader_ != nullptr) {
-      qplReader_->readWithVisitor(visitor);
+      return qplReader_->readWithVisitor(visitor);
     } else
 #endif      
       reader_->readWithVisitor(visitor);

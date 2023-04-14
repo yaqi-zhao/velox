@@ -39,4 +39,3 @@ target_link_libraries(
   velox_hive_connector
   velox_aggregates
   ${TEST_LINK_LIBS})
-

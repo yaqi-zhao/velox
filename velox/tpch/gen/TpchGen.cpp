@@ -107,8 +107,6 @@ std::string_view toTableName(Table table) {
       return "nation";
     case Table::TBL_REGION:
       return "region";
-    case Table::TBL_TEST:
-      return "test";             
   }
   return ""; // make gcc happy.
 }
@@ -123,7 +121,6 @@ Table fromTableName(std::string_view tableName) {
       {"lineitem", Table::TBL_LINEITEM},
       {"nation", Table::TBL_NATION},
       {"region", Table::TBL_REGION},
-      {"test", Table::TBL_TEST},
   };
 
   auto it = map.find(tableName);
@@ -279,122 +276,7 @@ RowTypePtr getTableSchema(Table table) {
           });
       return type;
     }
-    case Table::TBL_TEST: {
-      static RowTypePtr type = ROW(
-          {
-            "column_1",
-          },
-          {
-              INTEGER(),
-          });
-      return type;
-    }
-    case Table::TBL_TEST_SNAPPY: {
-      static RowTypePtr type = ROW(
-          {
-            "column_1",
-          },
-          {
-              INTEGER(),
-          });
-      return type;
-    }    
-    case Table::TBL_LINEORDER_FLAT: {
-      static RowTypePtr type = ROW(
-          {
-            "lo_orderkey",
-            "lo_linenumbery",
-            "lo_custkey",
-            "lo_partkey",
-            "lo_suppkey",
-            "lo_orderdate",
-            "lo_orderpriority",
-            "lo_shippriority",
-            "lo_quantity",
-            "lo_extendedprice",
-            "lo_ordtotalprice",
-            "lo_discount",
-            "lo_revenue",
-            "lo_supplycost",
-            "lo_tax",
-            "lo_commitdate",
-            "lo_shipmode",
-            "c_name",
-            "c_address",
-            "c_city",
-            "c_nation",
-            "c_region",
-            "c_phone",
-            "c_mktsegment",
-            "s_name",
-            "s_address",
-            "s_city",
-            "s_nation",
-            "s_region",
-            "s_phone",
-            "p_name",
-            "p_mfgr",
-            "p_category",
-            "p_brand",
-            "p_color",
-            "p_type",
-            "p_size",
-            "p_container",
-          },
-          {
-              INTEGER(),
-              INTEGER(),
-              INTEGER(),
-              INTEGER(),
-              INTEGER(),
-              DATE(),
-              VARCHAR(),
-              INTEGER(),
-              INTEGER(),
-              BIGINT(),
-              INTEGER(),
-              BIGINT(),
-              INTEGER(),
-              INTEGER(),
-              INTEGER(),
-              INTEGER(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              INTEGER(),
-              VARCHAR(),
-          });
-      return type;
-    }      
-    case Table::TBL_LINEORDER_FLAT_2: {
-      static RowTypePtr type = ROW(
-          {
-            "lo_orderkey",
-            "lo_custkey",   
-          },
-          {
-              BIGINT(),
-              BIGINT(),
-          });
-      return type;
-    }          
+
     case Table::TBL_LINEITEM: {
       static RowTypePtr type = ROW(
           {

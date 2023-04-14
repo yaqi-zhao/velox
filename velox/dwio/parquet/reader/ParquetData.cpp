@@ -115,16 +115,13 @@ dwio::common::PositionProvider ParquetData::seekToRowGroup(uint32_t index) {
   VELOX_CHECK(streams_[index], "Stream not enqueued for column");
   auto& metadata = rowGroups_[index].columns[type_->column].meta_data;
 #ifdef VELOX_ENABLE_QPL    
-  if (!hasNulls() && maxRepeat_ == 0 && metadata.codec == thrift::CompressionCodec::QPL) {
+  if (!hasNulls() && maxRepeat_ == 0 && metadata.codec == thrift::CompressionCodec::QPL  && metadata.type == thrift::Type::INT32) {
     qplReader_ = std::make_unique<QplPageReader>(
         std::move(streams_[index]),
         pool_,
         type_,
         metadata.codec,
         metadata.total_compressed_size);
-    std::cout << "use qpl reader" << std::endl;
-  // } else {
-    // std::cout << "use native reader" << std::endl;
   }
 #endif  
   reader_ = std::make_unique<PageReader>(
@@ -133,7 +130,6 @@ dwio::common::PositionProvider ParquetData::seekToRowGroup(uint32_t index) {
       type_,
       metadata.codec,
       metadata.total_compressed_size);
-  
   return dwio::common::PositionProvider(empty);
 }
 

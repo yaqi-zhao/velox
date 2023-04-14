@@ -30,13 +30,9 @@ LocalFileSink::LocalFileSink(
     const MetricsLogPtr& metricLogger,
     IoStatistics* stats)
     : DataSink{name, metricLogger, stats} {
-  // auto dir = fs::path(name).parent_path();
-  auto dir_1 = fs::path(name);
-  auto dir = dir_1.parent_path();
-  if (strlen(dir.c_str()) > 0) {
-    if (!fs::exists(dir)) {
-      DWIO_ENSURE(velox::common::generateFileDirectory(dir.c_str()));
-    }
+  auto dir = fs::path(name).parent_path();
+  if (!fs::exists(dir)) {
+    DWIO_ENSURE(velox::common::generateFileDirectory(dir.c_str()));
   }
   file_ = open(name_.c_str(), O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
   if (file_ == -1) {

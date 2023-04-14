@@ -13,7 +13,6 @@
 # limitations under the License.
 
 add_subdirectory(duckdb_reader)
-
 add_subdirectory(thrift)
 add_subdirectory(reader)
 add_subdirectory(writer)
