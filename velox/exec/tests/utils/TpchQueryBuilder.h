@@ -17,7 +17,6 @@
 
 #include "velox/dwio/common/Options.h"
 #include "velox/exec/tests/utils/PlanBuilder.h"
-#include "iostream"
 
 namespace facebook::velox::exec::test {
 
@@ -96,13 +95,6 @@ class TpchQueryBuilder {
   TpchPlan getQ20Plan() const;
   TpchPlan getQ21Plan() const;
   TpchPlan getQ22Plan() const;
-  TpchPlan getQ23Plan() const;
-  TpchPlan getQ24Plan() const;
-  TpchPlan getQ25Plan() const;
-
-  TpchPlan getQ31Plan() const;
-  // TpchPlan getQ32Plan() const;
-  // TpchPlan getQ33Plan() const;
 
   const std::vector<std::string>& getTableFilePaths(
       const std::string& tableName) const {
@@ -112,9 +104,6 @@ class TpchQueryBuilder {
   std::shared_ptr<const RowType> getRowType(
       const std::string& tableName,
       const std::vector<std::string>& columnNames) const {
-    for (auto iter = tableMetadata_.begin(); iter != tableMetadata_.end(); iter++) {
-      std::cout << "table name: " << iter->first << std::endl;
-    }
     auto columnSelector = std::make_shared<dwio::common::ColumnSelector>(
         tableMetadata_.at(tableName).type, columnNames);
     return columnSelector->buildSelectedReordered();
@@ -139,10 +128,6 @@ class TpchQueryBuilder {
   static constexpr const char* kPart = "part";
   static constexpr const char* kSupplier = "supplier";
   static constexpr const char* kPartsupp = "partsupp";
-  static constexpr const char* kTest = "test";
-  static constexpr const char* kTestSnappy = "test_snappy";
-  static constexpr const char* kLineorderFlat2 = "lineorder_flat_2";
-  static constexpr const char* kLineorderFlat = "lineorder_flat";
   std::shared_ptr<memory::MemoryPool> pool_ = memory::getDefaultMemoryPool();
 };
 

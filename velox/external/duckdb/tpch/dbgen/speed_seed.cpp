@@ -158,6 +158,15 @@ long sd_order(int child, DSS_HUGE skip_count, DBGenContext *ctx) {
 	return (0L);
 }
 
+long sd_lineorderflat(int child, DSS_HUGE skip_count, DBGenContext *ctx) {
+	(void)child;
+	ADVANCE_STREAM(&ctx->Seed[LF_CCITY_SD], skip_count);
+	ADVANCE_STREAM(&ctx->Seed[LF_CNATION_SD], skip_count);
+	ADVANCE_STREAM(&ctx->Seed[LF_COLOR_SD], skip_count);
+
+	return (0L);
+}
+
 long sd_psupp(int child, DSS_HUGE skip_count, DBGenContext *ctx) {
 	(void)child;
 

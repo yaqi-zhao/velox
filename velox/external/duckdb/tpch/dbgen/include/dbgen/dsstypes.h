@@ -55,6 +55,52 @@ typedef struct {
 	int clen;
 } line_t;
 
+
+typedef struct {
+	DSS_HUGE orderKey;
+	DSS_HUGE linenumber;
+	DSS_HUGE custkey;
+	DSS_HUGE partkey;
+	DSS_HUGE suppkey;
+	char orderdate[DATE_LEN];
+	char orderpriority[MAXAGG_LEN + 1];
+	DSS_HUGE shippriority;
+	DSS_HUGE quantity;
+	DSS_HUGE extendedprice;
+	DSS_HUGE ordtotalprice;
+	DSS_HUGE discount;
+	DSS_HUGE revenue;
+	DSS_HUGE supplycost;
+	DSS_HUGE tax;
+	char commitdate[DATE_LEN];
+
+	char shipmode[MAXAGG_LEN + 1];
+	char cname[MAXAGG_LEN + 1];
+	char caddress[MAXAGG_LEN + 1];
+	DSS_HUGE ccity;
+	DSS_HUGE cnation;
+	DSS_HUGE cregion;
+	char cphone[MAXAGG_LEN + 1];
+	char cmktsegment[MAXAGG_LEN + 1];
+	char sname[MAXAGG_LEN + 1];
+	char saddress[MAXAGG_LEN + 1];
+	DSS_HUGE scity;
+	DSS_HUGE snation;
+	DSS_HUGE sregion;
+	char sphone[MAXAGG_LEN + 1];
+	char pname[MAXAGG_LEN + 1];
+	char pmfgr[MAXAGG_LEN + 1];
+	DSS_HUGE pcategory;
+	char pbrand[MAXAGG_LEN + 1];
+	DSS_HUGE pcolor;
+	char ptype[MAXAGG_LEN + 1];
+	DSS_HUGE psize;
+	char pcontainer[MAXAGG_LEN + 1];
+	DSS_HUGE orderyear;
+} lineorder_flat_t;
+
+long mk_lineorderflat(DSS_HUGE index, lineorder_flat_t *c, DBGenContext *ctx);
+
 typedef struct {
 	DSS_HUGE okey;
 	DSS_HUGE custkey;
@@ -162,3 +208,4 @@ long sd_supp(int child, DSS_HUGE skip_count, DBGenContext *ctx);
 long sd_part(int child, DSS_HUGE skip_count, DBGenContext *ctx);
 long sd_psupp(int child, DSS_HUGE skip_count, DBGenContext *ctx);
 long sd_cust(int child, DSS_HUGE skip_count, DBGenContext *ctx);
+long sd_lineorderflat(int child, DSS_HUGE skip_count, DBGenContext *ctx);

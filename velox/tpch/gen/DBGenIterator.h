@@ -39,6 +39,7 @@ class DBGenIterator {
   void initSupplier(size_t offset);
   void initPart(size_t offset);
   void initCustomer(size_t offset);
+  void initLineorderFlat(size_t offset);
 
   // Generate different types of records.
   void genNation(size_t index, code_t& code);
@@ -47,6 +48,7 @@ class DBGenIterator {
   void genSupplier(size_t index, supplier_t& supplier);
   void genPart(size_t index, part_t& part);
   void genCustomer(size_t index, customer_t& customer);
+  void genLineorderFlat(size_t index, lineorder_flat_t& lineorder_flat);
 
   DBGenContext dbgenCtx_;
 };

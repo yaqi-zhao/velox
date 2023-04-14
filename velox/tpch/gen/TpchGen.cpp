@@ -152,6 +152,8 @@ size_t getRowCount(Table table, double scaleFactor) {
       return 25;
     case Table::TBL_REGION:
       return 5;
+    case Table::TBL_LINEORDER_FLAT:
+      return getLineItemRowCount(scaleFactor);      
     case Table::TBL_LINEITEM:
       return getLineItemRowCount(scaleFactor);
   }
@@ -341,6 +343,7 @@ RowTypePtr getTableSchema(Table table) {
             "p_type",
             "p_size",
             "p_container",
+            "lo_orderyear",
           },
           {
               INTEGER(),
@@ -352,35 +355,36 @@ RowTypePtr getTableSchema(Table table) {
               VARCHAR(),
               INTEGER(),
               INTEGER(),
-              BIGINT(),
-              INTEGER(),
-              BIGINT(),
               INTEGER(),
               INTEGER(),
               INTEGER(),
               INTEGER(),
+              INTEGER(),
+              INTEGER(),
+              DATE(),
               VARCHAR(),
               VARCHAR(),
               VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
-              VARCHAR(),
+              INTEGER(),
+              INTEGER(),
+              INTEGER(),
               VARCHAR(),
               VARCHAR(),
               VARCHAR(),
               VARCHAR(),
               INTEGER(),
+              INTEGER(),
+              INTEGER(),
               VARCHAR(),
+              VARCHAR(),
+              VARCHAR(),
+              INTEGER(),
+              VARCHAR(),
+              INTEGER(),
+              VARCHAR(),
+              INTEGER(),
+              VARCHAR(),
+              INTEGER(),
           });
       return type;
     }      
@@ -609,6 +613,122 @@ RowVectorPtr genTpchLineItem(
       lineItemCount,
       std::move(children));
 }
+
+
+RowVectorPtr genTpchLineOrderFlat(
+    size_t maxOrderRows,
+    size_t offset,
+    double scaleFactor,
+    memory::MemoryPool* pool) {
+  // We control the buffer size based on the orders table, then allocate the
+  // underlying buffer using the worst case (vectorSize * 7).
+  size_t vectorSize = getVectorSize(
+      getRowCount(Table::TBL_LINEORDER_FLAT, scaleFactor), maxOrderRows, offset);
+  // size_t vectorSize = getRowCount(Table::TBL_LINEORDER_FLAT, scaleFactor);
+  // size_t lineItemUpperBound = vectorSize * 7;
+
+  // Create schema and allocate vectors.
+  auto lineItemRowType = getTableSchema(Table::TBL_LINEORDER_FLAT);
+  auto children = allocateVectors(lineItemRowType, vectorSize, pool);
+
+  auto orderKeyVector = children[0]->asFlatVector<int32_t>();
+  auto linenumberVector = children[1]->asFlatVector<int32_t>();
+  auto custkeyVector = children[2]->asFlatVector<int32_t>();
+  auto partkeyVector = children[3]->asFlatVector<int32_t>();
+  auto suppkeyVector = children[4]->asFlatVector<int32_t>();
+  auto orderdateVector = children[5]->asFlatVector<Date>();
+  auto orderpriorityVector = children[6]->asFlatVector<StringView>();
+  auto shippriorityVector = children[7]->asFlatVector<int32_t>();
+  auto quantityVector = children[8]->asFlatVector<int32_t>();
+  auto extendedpriceVector = children[9]->asFlatVector<int32_t>();
+  auto ordtotalpriceVector = children[10]->asFlatVector<int32_t>();
+  auto discountVector = children[11]->asFlatVector<int32_t>();
+  auto revenueVector = children[12]->asFlatVector<int32_t>();
+  auto supplycostVector = children[13]->asFlatVector<int32_t>();
+  auto taxVector = children[14]->asFlatVector<int32_t>();
+  auto commitdateVector = children[15]->asFlatVector<Date>();
+
+  auto shipmodeVector = children[16]->asFlatVector<StringView>();
+  auto cnameVector = children[17]->asFlatVector<StringView>();
+  auto caddressVector = children[18]->asFlatVector<StringView>();
+  auto ccityVector = children[19]->asFlatVector<int32_t>();
+  auto cnationVector = children[20]->asFlatVector<int32_t>();
+  auto cregionVector = children[21]->asFlatVector<int32_t>();
+  auto cphoneVector = children[22]->asFlatVector<StringView>();
+  auto cmktsegmentVector = children[23]->asFlatVector<StringView>();
+  auto snameVector = children[24]->asFlatVector<StringView>();
+  auto saddressVector = children[25]->asFlatVector<StringView>();
+  auto scityVector = children[26]->asFlatVector<int32_t>();
+  auto snationVector = children[27]->asFlatVector<int32_t>();
+  auto sregionVector = children[28]->asFlatVector<int32_t>();
+  auto sphoneVector = children[29]->asFlatVector<StringView>();
+  auto pnameVector = children[30]->asFlatVector<StringView>();
+  auto pmfgrVector = children[31]->asFlatVector<StringView>();
+  auto pcategoryVector = children[32]->asFlatVector<int32_t>();
+  auto pbrandVector = children[33]->asFlatVector<StringView>();
+  auto pcolorVector = children[34]->asFlatVector<int32_t>();
+  auto ptypeVector = children[35]->asFlatVector<StringView>();
+  auto psizeVector = children[36]->asFlatVector<int32_t>();
+  auto pcontainerVector = children[37]->asFlatVector<StringView>();
+  auto orderyearVector = children[38]->asFlatVector<int32_t>();
+
+  DBGenIterator dbgenIt(scaleFactor);
+  dbgenIt.initLineorderFlat(offset);
+  lineorder_flat_t lineorder_flat;
+
+  for (size_t i = 0; i < vectorSize; ++i) {
+    dbgenIt.genLineorderFlat(i + offset + 1, lineorder_flat);
+
+    orderKeyVector->set(i, lineorder_flat.orderKey);
+    linenumberVector->set(i, lineorder_flat.linenumber);
+    custkeyVector->set(i, lineorder_flat.custkey);
+    partkeyVector->set(i, lineorder_flat.partkey);
+    suppkeyVector->set(i, lineorder_flat.suppkey);
+    orderdateVector->set(i, toDate(lineorder_flat.orderdate));
+    orderpriorityVector->set(i, StringView(lineorder_flat.orderpriority, strlen(lineorder_flat.orderpriority)));
+    shippriorityVector->set(i, lineorder_flat.shippriority);
+    quantityVector->set(i, lineorder_flat.quantity);
+    extendedpriceVector->set(i, lineorder_flat.extendedprice);
+    ordtotalpriceVector->set(i, lineorder_flat.ordtotalprice);
+    discountVector->set(i, lineorder_flat.discount);
+    revenueVector->set(i, lineorder_flat.revenue);
+    supplycostVector->set(i, lineorder_flat.supplycost);
+    taxVector->set(i, lineorder_flat.tax);
+    commitdateVector->set(i, toDate(lineorder_flat.commitdate));
+
+    shipmodeVector->set(i, StringView(lineorder_flat.shipmode, strlen(lineorder_flat.shipmode)));
+    cnameVector->set(i, StringView(lineorder_flat.cname, strlen(lineorder_flat.cname)));
+    caddressVector->set(i, StringView(lineorder_flat.caddress, strlen(lineorder_flat.caddress)));
+    ccityVector->set(i, lineorder_flat.ccity);
+    cnationVector->set(i, lineorder_flat.cnation);
+    cregionVector->set(i, lineorder_flat.cregion);
+    cphoneVector->set(i, StringView(lineorder_flat.cphone, strlen(lineorder_flat.cphone)));
+    cmktsegmentVector->set(i, StringView(lineorder_flat.cmktsegment, strlen(lineorder_flat.cmktsegment)));
+    snameVector->set(i, StringView(lineorder_flat.sname, strlen(lineorder_flat.sname)));
+    saddressVector->set(i, StringView(lineorder_flat.saddress, strlen(lineorder_flat.saddress)));
+    scityVector->set(i, lineorder_flat.scity);
+    snationVector->set(i, lineorder_flat.snation);
+    sregionVector->set(i, lineorder_flat.sregion);
+    sphoneVector->set(i, StringView(lineorder_flat.sphone, strlen(lineorder_flat.sphone)));
+    pnameVector->set(i, StringView(lineorder_flat.pname, strlen(lineorder_flat.pname)));
+    pmfgrVector->set(i, StringView(lineorder_flat.pmfgr, strlen(lineorder_flat.pmfgr)));
+    pcategoryVector->set(i, lineorder_flat.pcategory);
+    pbrandVector->set(i, StringView(lineorder_flat.pbrand, strlen(lineorder_flat.pbrand)));
+    pcolorVector->set(i, lineorder_flat.pcolor);
+    ptypeVector->set(i, StringView(lineorder_flat.ptype, strlen(lineorder_flat.ptype)));
+    psizeVector->set(i, lineorder_flat.psize);
+    pcontainerVector->set(i, StringView(lineorder_flat.pcontainer, strlen(lineorder_flat.pcontainer)));
+    orderyearVector->set(i, lineorder_flat.orderyear);
+  }
+
+  return std::make_shared<RowVector>(
+      pool,
+      lineItemRowType,
+      BufferPtr(nullptr),
+      vectorSize,
+      std::move(children));
+}
+
 
 RowVectorPtr genTpchPart(
     size_t maxRows,

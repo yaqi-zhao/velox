@@ -24,6 +24,7 @@ using thrift::RowGroup;
 std::unique_ptr<dwio::common::FormatData> ParquetParams::toFormatData(
     const std::shared_ptr<const dwio::common::TypeWithId>& type,
     const common::ScanSpec& /*scanSpec*/) {
+      std::cout << "type: " << type->type->kind() << std::endl;
   return std::make_unique<ParquetData>(type, metaData_.row_groups, pool());
 }
 
@@ -114,8 +115,12 @@ dwio::common::PositionProvider ParquetData::seekToRowGroup(uint32_t index) {
   VELOX_CHECK_LT(index, streams_.size());
   VELOX_CHECK(streams_[index], "Stream not enqueued for column");
   auto& metadata = rowGroups_[index].columns[type_->column].meta_data;
+  // for (int i = 0; i < metadata.encodings.size(); i++) {
+  //   std::cout << "encodings: " << metadata.encodings[i] << std::endl;
+  // }
+  // std::cout << "type: " << metadata.type << std::endl;
 #ifdef VELOX_ENABLE_QPL    
-  if (!hasNulls() && maxRepeat_ == 0 && metadata.codec == thrift::CompressionCodec::QPL) {
+  if (!hasNulls() && maxRepeat_ == 0 && metadata.codec == thrift::CompressionCodec::QPL  && metadata.type == thrift::Type::INT32) {
     qplReader_ = std::make_unique<QplPageReader>(
         std::move(streams_[index]),
         pool_,

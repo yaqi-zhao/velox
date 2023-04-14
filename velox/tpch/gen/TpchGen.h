@@ -206,6 +206,13 @@ RowVectorPtr genTpchCustomer(
     memory::MemoryPool* pool =
         &velox::memory::getProcessDefaultMemoryManager().getRoot());
 
+RowVectorPtr genTpchLineOrderFlat(
+    size_t maxOrderRows = 10000,
+    size_t offset = 0,
+    double scaleFactor = 1,
+    memory::MemoryPool* pool =
+        &velox::memory::getProcessDefaultMemoryManager().getRoot());
+
 /// Returns a row vector containing at most `maxRows` rows of the "nation"
 /// table, starting at `offset`, and given the scale factor. The row vector
 /// returned has the following schema:

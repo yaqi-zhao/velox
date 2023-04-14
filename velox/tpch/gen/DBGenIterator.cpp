@@ -72,6 +72,10 @@ void DBGenIterator::initOrder(size_t offset) {
   sd_line(LINE, offset, &dbgenCtx_);
 }
 
+void DBGenIterator::initLineorderFlat(size_t offset) {
+  sd_lineorderflat(LINEORDERFLAT, offset, &dbgenCtx_);
+}
+
 void DBGenIterator::initSupplier(size_t offset) {
   sd_supp(SUPP, offset, &dbgenCtx_);
 }
@@ -119,6 +123,12 @@ void DBGenIterator::genCustomer(size_t index, customer_t& customer) {
   row_start(CUST, &dbgenCtx_);
   mk_cust(index, &customer, &dbgenCtx_);
   row_stop_h(CUST, &dbgenCtx_);
+}
+
+void DBGenIterator::genLineorderFlat(size_t index, lineorder_flat_t& lineorder_flat) {
+  row_start(LINEORDERFLAT, &dbgenCtx_);
+  mk_lineorderflat(index, &lineorder_flat, &dbgenCtx_);
+  row_stop_h(LINEORDERFLAT, &dbgenCtx_);
 }
 
 } // namespace facebook::velox::tpch

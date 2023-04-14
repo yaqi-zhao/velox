@@ -52,7 +52,8 @@
 #define NATION 8
 #define REGION 9
 #define UPDATE 10
-#define MAX_TABLE 11
+#define LINEORDERFLAT 11
+#define MAX_TABLE 12
 #define ONE_STREAM 1
 #define ADD_AT_END 2
 
@@ -294,6 +295,14 @@ EXTERN int delete_segment;
 #define C_MSEG_MAX 5
 #define C_ABAL_MIN -99999
 #define C_ABAL_MAX 999999
+
+#define LF_SIZE 165
+#define LF_NAME_TAG "Lineorder_Flat#"
+#define LF_NAME_FMT "%%s%%0%d%s"
+#define LF_MSEG_MAX 5
+#define LF_ABAL_MIN -99999
+#define LF_ABAL_MAX 999999
+
 /*
  * defines which control the order table
  */
@@ -326,6 +335,12 @@ EXTERN int delete_segment;
 #define L_CDTE_MAX 90
 #define L_RDTE_MIN 1
 #define L_RDTE_MAX 30
+#define LF_CITY_MIN 0
+#define LF_CITY_MAX 250
+#define LF_NATION_MIN 0
+#define LF_NATION_MAX 25
+#define LF_COLOR_MIN 0
+#define LF_COLOR_MAX 90
 /*
  * defines which control the time table
  */
@@ -350,7 +365,7 @@ EXTERN int delete_segment;
 #define ENDDATE 98365
 #define TOTDATE 2557
 #define UPD_PCT 10
-#define MAX_STREAM 47
+#define MAX_STREAM 50
 #define V_STR_LOW 0.4
 #define PENNIES 100 /* for scaled int money arithmetic */
 #define Q11_FRACTION (double)0.0001
@@ -481,6 +496,9 @@ int dbg_print(int dt, FILE *tgt, void *data, int len, int eol);
 #define BBB_TYPE_SD 45
 #define BBB_CMNT_SD 46
 #define BBB_OFFSET_SD 47
+#define LF_CCITY_SD 48
+#define LF_CNATION_SD 49
+#define LF_COLOR_SD 50
 
 struct DBGenContext {
   seed_t Seed[MAX_STREAM + 1] = {
@@ -531,7 +549,10 @@ struct DBGenContext {
       {SUPP, 263032577, 0, 1}, /* BBB offset   44 */
       {SUPP, 753643799, 0, 1}, /* BBB type     45 */
       {SUPP, 202794285, 0, 1}, /* BBB comment  46 */
-      {SUPP, 715851524, 0, 1} /* BBB junk     47 */
+      {SUPP, 715851524, 0, 1}, /* BBB junk     47 */
+      {LINEORDERFLAT, 1, 0, 250}, /* LF_CCITY_SD   48 */
+      {LINEORDERFLAT, 1, 0, 25}, /* LF_CNATION_SD    49 */
+      {LINEORDERFLAT, 1, 0, 90} /* LF_COLOR_SD    50 */  
   };
 
   static constexpr double dM = 2147483647.0;

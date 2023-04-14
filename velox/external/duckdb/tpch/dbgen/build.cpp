@@ -86,6 +86,76 @@ long mk_cust(DSS_HUGE n_cust, customer_t *c, DBGenContext *ctx) {
 	return (0);
 }
 
+long mk_lineorderflat(DSS_HUGE index, lineorder_flat_t *c, DBGenContext *ctx) {
+	DSS_HUGE temp;
+	DSS_HUGE brnd;
+	static int bInit = 0;
+	static char szFormat[100];
+	static char szBrandFormat[100];
+	static char orderyear[5];
+	char **mk_ascdate PROTO((void));
+	DSS_HUGE i;
+	DSS_HUGE tmp_date;
+	static char **asc_date = NULL;
+	if (asc_date == NULL)
+		asc_date = mk_ascdate();
+
+	if (!bInit) {
+		sprintf(szFormat, LF_NAME_FMT, 1, &HUGE_FORMAT[1]);
+		bInit = 1;
+	}
+	c->orderKey = index;
+	RANDOM(c->linenumber, L_QTY_MIN, L_QTY_MAX, &ctx->Seed[L_QTY_SD]);
+	RANDOM(c->custkey, O_CKEY_MIN, O_CKEY_MAX, &ctx->Seed[O_CKEY_SD]);
+	RANDOM(c->partkey, L_PKEY_MIN, L_PKEY_MAX, &ctx->Seed[L_PKEY_SD]);
+	RANDOM(c->suppkey, PS_SKEY_MIN, PS_SKEY_MAX, &ctx->Seed[O_SUPP_SD]);
+	RANDOM(tmp_date, O_ODATE_MIN, O_ODATE_MAX, &ctx->Seed[O_ODATE_SD]);
+	strcpy(c->orderdate, asc_date[tmp_date - STARTDATE]);
+	strncpy(orderyear, asc_date[tmp_date - STARTDATE], 4);
+	c->orderyear = atoi(orderyear);
+	pick_str(&o_priority_set, &ctx->Seed[O_PRIO_SD], c->orderpriority);
+	c->shippriority = 0;
+	RANDOM(c->quantity, L_QTY_MIN, L_QTY_MAX, &ctx->Seed[L_QTY_SD]);
+	c->extendedprice= rpb_routine(index); // todo
+	c->ordtotalprice += ((c->extendedprice * ((long)100 - c->discount)) / (long)PENNIES) *
+		                 ((long)100 + c->tax) / (long)PENNIES;
+	RANDOM(c->discount, L_DCNT_MIN, L_DCNT_MAX, &ctx->Seed[L_DCNT_SD]);
+	RANDOM(c->revenue, L_DCNT_MIN, L_DCNT_MAX, &ctx->Seed[L_DCNT_SD]);
+	RANDOM(c->supplycost, PS_SCST_MIN, PS_SCST_MAX, &ctx->Seed[PS_SCST_SD]);
+	RANDOM(c->tax, L_TAX_MIN, L_TAX_MAX, &ctx->Seed[L_TAX_SD]);
+	strcpy(c->commitdate, asc_date[tmp_date - STARTDATE]);
+
+	pick_str(&l_smode_set, &ctx->Seed[L_SMODE_SD], c->shipmode);
+	sprintf(c->cname, szFormat, C_NAME_TAG, index);
+	V_STR(C_ADDR_LEN, &ctx->Seed[C_ADDR_SD], c->caddress);	
+	RANDOM(c->ccity, LF_CITY_MIN, LF_CITY_MAX, &ctx->Seed[LF_CCITY_SD]);
+	RANDOM(c->cregion, L_TAX_MIN, L_TAX_MAX, &ctx->Seed[L_TAX_SD]);
+	RANDOM(i, 0, (nations.count - 1), &ctx->Seed[C_NTRG_SD]);
+	c->cnation = i;
+	gen_phone(i, c->cphone, &ctx->Seed[S_PHNE_SD]);
+	pick_str(&c_mseg_set, &ctx->Seed[C_MSEG_SD], c->cmktsegment);
+
+	sprintf(c->sname, szFormat, S_NAME_TAG, index);
+	V_STR(S_ADDR_LEN, &ctx->Seed[S_ADDR_SD], c->saddress);
+	RANDOM(c->scity, LF_CITY_MIN, LF_CITY_MAX, &ctx->Seed[LF_CCITY_SD]);
+	RANDOM(c->sregion, L_TAX_MIN, L_TAX_MAX, &ctx->Seed[L_TAX_SD]);
+	RANDOM(i, 0, (nations.count - 1), &ctx->Seed[C_NTRG_SD]);
+	c->snation = i;
+
+	agg_str(&colors, (long)P_NAME_SCL, &ctx->Seed[P_NAME_SD], c->pname);
+	RANDOM(temp, P_MFG_MIN, P_MFG_MAX, &ctx->Seed[P_MFG_SD]);
+	sprintf(c->pmfgr, szFormat, P_MFG_TAG, temp);
+	RANDOM(c->pcategory, LF_NATION_MIN, LF_NATION_MAX, &ctx->Seed[LF_CNATION_SD]);
+	RANDOM(brnd, P_BRND_MIN, P_BRND_MAX, &ctx->Seed[P_BRND_SD]);
+	sprintf(c->pbrand, szFormat, P_BRND_TAG, (temp * 10 + brnd));
+	RANDOM(c->pcolor, LF_COLOR_MIN, LF_COLOR_MAX, &ctx->Seed[LF_COLOR_SD]);
+	pick_str(&p_types_set, &ctx->Seed[P_TYPE_SD], c->ptype);
+	RANDOM(c->psize, P_SIZE_MIN, P_SIZE_MAX, &ctx->Seed[P_SIZE_SD]);
+	pick_str(&p_cntr_set, &ctx->Seed[P_CNTR_SD], c->pcontainer);
+
+	return (0);
+}
+
 /*
  * generate the numbered order and its associated lineitems
  */

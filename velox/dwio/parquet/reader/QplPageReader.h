@@ -576,6 +576,9 @@ void QplPageReader::readWithVisitor(Visitor& visitor) {
     auto& scanState = reader.scanState();
     if (scanState.dictionary.values != dictionary_.values) {
       scanState.dictionary = dictionary_;
+      if (hasFilter) {
+        makeFilterCache(scanState);
+      }      
     }
     scanState.updateRawState();
     dict_qpl_job_id = 0;

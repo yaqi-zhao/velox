@@ -223,6 +223,7 @@ class DeflateRleBpDecoder {
       } else {
         out_ptr = reinterpret_cast<uint8_t*>(values);
       }
+      memset(out_ptr, 0, pageHeader_.data_page_header.num_values * sizeof(TValues));
     } else {
       return 0;
     }
@@ -244,6 +245,7 @@ class DeflateRleBpDecoder {
     job->num_input_elements = pageHeader_.data_page_header.num_values;
     job->flags   = QPL_FLAG_DECOMPRESS_ENABLE | QPL_FLAG_FIRST | QPL_FLAG_LAST;
     job->numa_id = 1;
+    // std::cout << "pageHeader_.compressed_page_size: " << pageHeader_.compressed_page_size << std::endl;
 
     auto status = qpl_submit_job(job);
     uint32_t check_time = 0;
@@ -284,17 +286,33 @@ class DeflateRleBpDecoder {
         memcpy((void*)values, input, numAllRows * sizeof(TValues));
       }
 
-      visitor.template processRun<hasFilter, hasHook, scatter>(
-          values,
-          numRows,
-          nullptr,
-          filterHits,
-          values,
-          numValues);
-      if (visitor.atEnd()) {
-        visitor.setNumValues(hasFilter ? numValues : numAllRows);
-        return;
-      }       
+  uint32_t check_time = 0;
+  while (check_time < 100) {
+    try {
+        visitor.template processRun<hasFilter, hasHook, scatter>(
+            values,
+            numRows,
+            nullptr,
+            filterHits,
+            values,
+            numValues);
+        if (visitor.atEnd()) {
+          visitor.setNumValues(hasFilter ? numValues : numAllRows);
+          return;
+        }  
+        return;     
+    } catch (const std::runtime_error& e) {
+      check_time++;
+      // We cannot throw an exception from the destructor. Warn instead.
+        if (decoded_values_ != NULL) {
+          // std::cout << "decode is no null" << std::endl;
+          input = decoded_values_->asMutable<TValues>() + cur_visitor_pos - numAllRows;
+          cur_visitor_pos += numAllRows;
+          memcpy((void*)values, input, numAllRows * sizeof(TValues));
+        }
+        std::cout << "check time: " << check_time << folly::to<std::string>(e.what()) << std::endl;
+    }
+  }      
   }  
 
 };

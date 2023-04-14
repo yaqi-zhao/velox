@@ -32,9 +32,6 @@
 #include "velox/functions/prestosql/aggregates/RegisterAggregateFunctions.h"
 #include "velox/functions/prestosql/registration/RegistrationFunctions.h"
 #include "velox/parse/TypeResolver.h"
-#include "velox/dwio/common/QplJobPool.h"
-
-#include <sys/time.h>
 
 using namespace facebook::velox;
 using namespace facebook::velox::exec;
@@ -113,7 +110,6 @@ DEFINE_int32(
     "GB of process memory for cache and query.. if "
     "non-0, uses mmap to allocator and in-process data cache.");
 DEFINE_int32(num_repeats, 1, "Number of times to run each query");
-DEFINE_int32(num_threads, 1, "Number of thread to run each query");
 
 DEFINE_validator(data_path, &notEmpty);
 DEFINE_validator(data_format, &validateDataFormat);
@@ -138,9 +134,9 @@ class TpchBenchmark {
     parse::registerTypeResolver();
     filesystems::registerLocalFileSystem();
     if (FLAGS_use_native_parquet_reader) {
-      facebook::velox::parquet::registerParquetReaderFactory(parquet::ParquetReaderType::NATIVE);
+      parquet::registerParquetReaderFactory(parquet::ParquetReaderType::NATIVE);
     } else {
-      facebook::velox::parquet::registerParquetReaderFactory(parquet::ParquetReaderType::QPL);
+      parquet::registerParquetReaderFactory(parquet::ParquetReaderType::DUCKDB);
     }
     dwrf::registerDwrfReaderFactory();
     ioExecutor_ = std::make_unique<folly::IOThreadPoolExecutor>(8);
@@ -293,30 +289,6 @@ BENCHMARK(q22) {
   benchmark.run(planContext);
 }
 
-BENCHMARK(q23) {
-  const auto planContext = queryBuilder->getQueryPlan(23);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q24) {
-  const auto planContext = queryBuilder->getQueryPlan(24);
-  benchmark.run(planContext);
-}
-
-void run_benchmark(int query_id) {
-  functions::prestosql::registerAllScalarFunctions();
-  aggregate::prestosql::registerAllAggregateFunctions();
-  const auto queryPlan = queryBuilder->getQueryPlan(FLAGS_run_query_verbose);
-  const auto [cursor, actualResults] = benchmark.run(queryPlan);
-  if (!cursor) {
-    LOG(ERROR) << "Query terminated with error. Exiting";
-    exit(1);
-  }
-  auto task = cursor->task();
-  ensureTaskCompletion(task.get());  
-  return;
-}
-
 int main(int argc, char** argv) {
   std::string kUsage(
       "This program benchmarks TPC-H queries. Run 'velox_tpch_benchmark -helpon=TpchBenchmark' for available options.\n");
@@ -326,14 +298,9 @@ int main(int argc, char** argv) {
   queryBuilder =
       std::make_shared<TpchQueryBuilder>(toFileFormat(FLAGS_data_format));
   queryBuilder->initialize(FLAGS_data_path);
-#ifdef VELOX_ENABLE_QPL    
-    dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
-#endif    
-  // sleep(10);
   if (FLAGS_run_query_verbose == -1) {
     folly::runBenchmarks();
-  } else if (FLAGS_num_threads == 3) {
-    // sleep(10);
+  } else {
     const auto queryPlan = queryBuilder->getQueryPlan(FLAGS_run_query_verbose);
     const auto [cursor, actualResults] = benchmark.run(queryPlan);
     if (!cursor) {
@@ -360,25 +327,5 @@ int main(int argc, char** argv) {
     std::cout << printPlanWithStats(
                      *queryPlan.plan, stats, FLAGS_include_custom_stats)
               << std::endl;
-  } else {
-    // sleep(10);
-    auto startTime = std::chrono::system_clock::now();
-    std::vector<std::thread> submite_threads(FLAGS_num_threads);
-    long ITER = 1;
-    for (int i = 0; i < ITER; i++) {
-      for(int j = 0; j < submite_threads.size(); j++) {
-        submite_threads[j] = std::thread(run_benchmark, FLAGS_run_query_verbose);
-      }
-      for (int j = 0; j < submite_threads.size(); j++) {
-        submite_threads[j].join();
-        // usleep(1);
-      }
-    }
-    auto curTime = std::chrono::system_clock::now();
-    size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
-        curTime - startTime).count();
-    int qps = ITER * FLAGS_num_threads * (long)1000000 / (long)msElapsed;
-    printf("QueryBenchmark  q%d  concurrency_%d drivers_%d time: %d us   QPS: %d\n", FLAGS_run_query_verbose, FLAGS_num_threads, FLAGS_num_drivers, (int)(msElapsed), qps);
   }
 }
-// }
