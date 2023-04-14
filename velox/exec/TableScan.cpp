@@ -17,7 +17,6 @@
 #include "velox/common/time/Timer.h"
 #include "velox/exec/Task.h"
 #include "velox/expression/Expr.h"
-#include "iostream"
 
 DEFINE_int32(split_preload_per_driver, 2, "Prefetch split metadata");
 
@@ -163,7 +162,6 @@ RowVectorPtr TableScan::getOutput() {
          &debugString_});
 
     auto dataOptional = dataSource_->next(readBatchSize_, blockingFuture_);
-    // std::cout << "readBatchSize_: " << readBatchSize_ << "kDefaultBatchSize: " << kDefaultBatchSize  << std::endl;
     checkPreload();
 
     {

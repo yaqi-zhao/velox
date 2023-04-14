@@ -279,12 +279,10 @@ void QplPageReader::prepareDataPageV1(const PageHeader& pageHeader, int64_t row)
     return;
   }
   dataPageData_ = readBytes(pageHeader.compressed_page_size, pageBuffer_);
+  dictionaryIdQplDecoder_ = std::make_unique<DeflateRleBpDecoder>(
+           dataPageData_, pageHeader, type_, pool_);
+  decode_job_id = dictionaryIdQplDecoder_->rleDecode();
   pageData_ = dataPageData_;
-//   pageData_ = uncompressData(
-//       pageData_,
-//       pageHeader.compressed_page_size,
-//       pageHeader.uncompressed_page_size);
-//   auto pageEnd = pageData_ + pageHeader.uncompressed_page_size;
   if (maxRepeat_ > 0) {
     std::cout << "Error: max Repeat cannot bigger than 0." << std::endl;
     throw std::runtime_error("Error: max Repeat cannot bigger than 0");
@@ -300,9 +298,9 @@ void QplPageReader::prepareDataPageV1(const PageHeader& pageHeader, int64_t row)
     readPageDefLevels();
   }
 
-  if (row != kRepDefOnly) {
-    makeDecoder(pageHeader);
-  }
+  // if (row != kRepDefOnly) {
+  //   makeDecoder(pageHeader);
+  // }
 }
 
 void QplPageReader::prepareDataPageV2(const PageHeader& pageHeader, int64_t row) {
@@ -372,16 +370,16 @@ void QplPageReader::waitQplJob(uint32_t job_id) {
 
   dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
   qpl_job* job = qpl_job_pool.GetJobById(job_id);
-  auto status = QPL_STS_OK;
+  auto status = qpl_check_job(job);
   uint32_t check_time = 0;
-  do
+  while (status == QPL_STS_BEING_PROCESSED && check_time < UINT32_MAX - 1)
   {
       // _tpause(1, __rdtsc() + 1000);
       _umwait(1, __rdtsc() + 8000);
       status = qpl_check_job(job);
       check_time++;
       // std::cout << "wait job check_time: " << (int)check_time << ", status: " << (int)status << std::endl;
-  } while (status == QPL_STS_BEING_PROCESSED && check_time < UINT32_MAX - 1);
+  } 
   
   qpl_fini_job(job);
   // std::cout << "wait qpl job: " << job_id << std::endl;
@@ -389,12 +387,12 @@ void QplPageReader::waitQplJob(uint32_t job_id) {
     dict_qpl_job_status = status;
   } 
   qpl_job_pool.ReleaseJob(job_id);
-  int id = syscall(SYS_gettid);
-  VELOX_DCHECK(status == QPL_STS_OK, "Check of QPL Job failed, status: {}, job_id: {}, sys_id: {}", status, job_id, id);
-  if (status != QPL_STS_OK) {
-    throw std::runtime_error(
-      "Check of QPL Job failed, status:" + std::to_string(status) + " job_id: " + std::to_string(job_id));
-  }
+  // int id = syscall(SYS_gettid);
+  VELOX_DCHECK(status == QPL_STS_OK, "Check of QPL Job failed, status: {}, job_id: {}, sys_id: {}", status, job_id);
+  // if (status != QPL_STS_OK) {
+  //   throw std::runtime_error(
+  //     "Check of QPL Job failed, status:" + std::to_string(status) + " job_id: " + std::to_string(job_id));
+  // }
 }
 
 void QplPageReader::prepareDictionary(const PageHeader& pageHeader) {
@@ -526,10 +524,9 @@ void QplPageReader::prepareDict(const PageHeader& pageHeader) {
             values[i] = value;
           }
         }
-        auto values = dictionary_.values->asMutable<UnscaledShortDecimal>();
+        auto values = dictionary_.values->asMutable<int64_t>();
         for (auto i = 0; i < dictionary_.numValues; ++i) {
-          values[i] = UnscaledShortDecimal(
-              __builtin_bswap64(values[i].unscaledValue()));
+          values[i] = __builtin_bswap64(values[i]);
         }
         break;
       } else if (type_->type->isLongDecimal()) {
@@ -550,10 +547,9 @@ void QplPageReader::prepareDict(const PageHeader& pageHeader) {
             values[i] = value;
           }
         }
-        auto values = dictionary_.values->asMutable<UnscaledLongDecimal>();
+        auto values = dictionary_.values->asMutable<int128_t>();
         for (auto i = 0; i < dictionary_.numValues; ++i) {
-          values[i] = UnscaledLongDecimal(
-              dwio::common::builtin_bswap128(values[i].unscaledValue()));
+          values[i] = dwio::common::builtin_bswap128(values[i]);
         }
         break;
       }
@@ -711,8 +707,8 @@ void QplPageReader::makeDecoder(PageHeader pageHeader) {
     case Encoding::PLAIN_DICTIONARY:
       dictionaryIdDecoder_ = std::make_unique<RleBpDataDecoder>(
           pageData_ + 1, pageData_ + encodedDataSize_, pageData_[0]);
-      dictionaryIdQplDecoder_ = std::make_unique<DeflateRleBpDecoder>(
-           dataPageData_, pageHeader, type_, pool_);
+      // dictionaryIdQplDecoder_ = std::make_unique<DeflateRleBpDecoder>(
+      //      dataPageData_, pageHeader, type_, pool_);
       break;
     case Encoding::PLAIN:
       switch (parquetType) {
@@ -891,32 +887,32 @@ bool QplPageReader::rowsForPage(
       numLeafNullsConsumed_ = rowOfPage_;
     }
   }
-  auto& scanState = reader.scanState();
-  if (isDictionary()) {
-    if (scanState.dictionary.values != dictionary_.values) {
-      scanState.dictionary = dictionary_;
-      if (hasFilter) {
-        makeFilterCache(scanState);
-      }
-      scanState.updateRawState();
-    }
-  } else {
-    if (scanState.dictionary.values) {
-      // If there are previous pages in the current read, nulls read
-      // from them are in 'nullConcatenation_' Put this into the
-      // reader for the time of dedictionarizing so we don't read
-      // undefined dictionary indices.
-      if (mayProduceNulls && reader.numValues()) {
-        reader.setNulls(nullConcatenation_.buffer());
-      }
-      reader.dedictionarize();
-      // The nulls across all pages are in nullConcatenation_. Clear
-      // the nulls and let the prepareNulls below reserve nulls for
-      // the new page.
-      reader.setNulls(nullptr);
-      scanState.dictionary.clear();
-    }
-  }
+  // auto& scanState = reader.scanState();
+  // if (isDictionary()) {
+  //   if (scanState.dictionary.values != dictionary_.values) {
+  //     scanState.dictionary = dictionary_;
+  //     if (hasFilter) {
+  //       makeFilterCache(scanState);
+  //     }
+  //     scanState.updateRawState();
+  //   }
+  // } else {
+  //   if (scanState.dictionary.values) {
+  //     // If there are previous pages in the current read, nulls read
+  //     // from them are in 'nullConcatenation_' Put this into the
+  //     // reader for the time of dedictionarizing so we don't read
+  //     // undefined dictionary indices.
+  //     if (mayProduceNulls && reader.numValues()) {
+  //       reader.setNulls(nullConcatenation_.buffer());
+  //     }
+  //     reader.dedictionarize();
+  //     // The nulls across all pages are in nullConcatenation_. Clear
+  //     // the nulls and let the prepareNulls below reserve nulls for
+  //     // the new page.
+  //     reader.setNulls(nullptr);
+  //     scanState.dictionary.clear();
+  //   }
+  // }
 
   // Then check how many of the rows to visit are on the same page as the
   // current one.

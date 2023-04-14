@@ -39,9 +39,6 @@
 #include "velox/functions/prestosql/aggregates/RegisterAggregateFunctions.h"
 #include "velox/functions/prestosql/registration/RegistrationFunctions.h"
 #include "velox/parse/TypeResolver.h"
-#include "velox/dwio/common/QplJobPool.h"
-
-#include <sys/time.h>
 
 using namespace facebook::velox;
 using namespace facebook::velox::exec;
@@ -235,9 +232,9 @@ class TpchBenchmark {
     parse::registerTypeResolver();
     filesystems::registerLocalFileSystem();
     if (FLAGS_use_native_parquet_reader) {
-      facebook::velox::parquet::registerParquetReaderFactory(parquet::ParquetReaderType::NATIVE);
+      parquet::registerParquetReaderFactory(parquet::ParquetReaderType::NATIVE);
     } else {
-      facebook::velox::parquet::registerParquetReaderFactory(parquet::ParquetReaderType::QPL);
+      parquet::registerParquetReaderFactory(parquet::ParquetReaderType::DUCKDB);
     }
     dwrf::registerDwrfReaderFactory();
     ioExecutor_ =
@@ -556,30 +553,6 @@ BENCHMARK(q22) {
   benchmark.run(planContext);
 }
 
-BENCHMARK(q23) {
-  const auto planContext = queryBuilder->getQueryPlan(23);
-  benchmark.run(planContext);
-}
-
-BENCHMARK(q24) {
-  const auto planContext = queryBuilder->getQueryPlan(24);
-  benchmark.run(planContext);
-}
-
-void run_benchmark(int query_id) {
-  functions::prestosql::registerAllScalarFunctions();
-  aggregate::prestosql::registerAllAggregateFunctions();
-  const auto queryPlan = queryBuilder->getQueryPlan(FLAGS_run_query_verbose);
-  const auto [cursor, actualResults] = benchmark.run(queryPlan);
-  if (!cursor) {
-    LOG(ERROR) << "Query terminated with error. Exiting";
-    exit(1);
-  }
-  auto task = cursor->task();
-  ensureTaskCompletion(task.get());  
-  return;
-}
-
 int tpchBenchmarkMain() {
   benchmark.initialize();
   queryBuilder =
@@ -594,4 +567,3 @@ int tpchBenchmarkMain() {
   queryBuilder.reset();
   return 0;
 }
-// }

@@ -80,7 +80,6 @@ target_link_libraries(
   velox_link_libs
   ${TEST_LINK_LIBS})
 
-
 if(${VELOX_ENABLE_ARROW})
 
   add_executable(velox_dwio_parquet_rlebp_decoder_test RleBpDecoderTest.cpp)

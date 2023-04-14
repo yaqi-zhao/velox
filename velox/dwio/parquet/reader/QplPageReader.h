@@ -121,8 +121,6 @@ class QplPageReader {
     dictionaryValues_.reset();
   }
 
-  void waitQplJob(uint32_t job_id);
-
   /// Returns the range of repdefs for the top level rows covered by the last
   /// decoderepDefs().
   std::pair<int32_t, int32_t> repDefRange() const {
@@ -132,7 +130,8 @@ class QplPageReader {
   // Parses the PageHeader at 'inputStream_', and move the bufferStart_ and
   // bufferEnd_ to the corresponding positions.
   thrift::PageHeader readPageHeader();
-void prepareDict(const thrift::PageHeader& pageHeader);
+  void prepareDict(const thrift::PageHeader& pageHeader);
+  void waitQplJob(uint32_t job_id);
 
  private:
   // Indicates that we only want the repdefs for the next page. Used when
@@ -190,7 +189,6 @@ void prepareDict(const thrift::PageHeader& pageHeader);
   void prepareDataPageV1(const thrift::PageHeader& pageHeader, int64_t row);
   void prepareDataPageV2(const thrift::PageHeader& pageHeader, int64_t row);
   void prepareDictionary(const thrift::PageHeader& pageHeader);
-  // void makeDecoder();
 
   // For a non-top level leaf, reads the defs and sets 'leafNulls_' and
   // 'numRowsInPage_' accordingly. This is used for non-top level leaves when
@@ -245,32 +243,6 @@ void prepareDict(const thrift::PageHeader& pageHeader);
       bool mayProduceNulls,
       folly::Range<const vector_size_t*>& rows,
       const uint64_t* FOLLY_NULLABLE& nulls);
-
-  // Calls the visitor, specialized on the data type since not all visitors
-  // apply to all types.
-  // template <
-  //     typename Visitor,
-  //     typename std::enable_if<
-  //             std::is_same_v<typename Visitor::DataType, int32_t>,
-  //         int>::type = 0>
-  // uint32_t callDecoder(
-  //     const uint64_t* FOLLY_NULLABLE nulls,
-  //     bool& nullsFromFastPath,
-  //     Visitor visitor) {
-  //   if (nulls) {
-  //     std::cout << "not support yet" << std::endl;
-  //     return 0;
-  //   } else {
-  //     if (isDictionary()) {
-  //       auto dictVisitor = visitor.toDictionaryColumnVisitor();
-  //       return dictionaryIdQplDecoder_->readWithVisitor<false>(nullptr, dictVisitor);
-  //     } else {
-  //       directDecoder_->readWithVisitor<false>(
-  //           nulls, visitor, !this->type_->type->isShortDecimal());
-  //     }
-  //   }
-  //   return 0;
-  // }
 
   template <
       typename Visitor,
@@ -328,7 +300,7 @@ void prepareDict(const thrift::PageHeader& pageHeader);
     } else {
       if (isDictionary()) {
         auto dictVisitor = visitor.toDictionaryColumnVisitor();
-        return dictionaryIdQplDecoder_->decodeWithVisitor<false>(nullptr, dictVisitor, visitBase_);
+        return dictionaryIdQplDecoder_->rleDecode();
       } else {
         directDecoder_->readWithVisitor<false>(
             nulls, visitor, !this->type_->type->isShortDecimal());
@@ -487,6 +459,7 @@ void prepareDict(const thrift::PageHeader& pageHeader);
 
   uint32_t dict_qpl_job_id;
   qpl_status dict_qpl_job_status;
+  uint32_t decode_job_id;
 
   // Offset of current page's header from start of ColumnChunk.
   uint64_t pageStart_{0};
@@ -567,7 +540,6 @@ void QplPageReader::readWithVisitor(Visitor& visitor) {
     int32_t numValuesBeforePage = numRowsInReader<hasFilter>(reader);
     visitor.setNumValuesBias(numValuesBeforePage);
     visitor.setRows(pageRows);
-    uint32_t decode_job_id = callDecoder(nulls, nullsFromFastPath, visitor);
 
     // process dict qpl job
     waitQplJob(dict_qpl_job_id);
@@ -576,10 +548,14 @@ void QplPageReader::readWithVisitor(Visitor& visitor) {
     auto& scanState = reader.scanState();
     if (scanState.dictionary.values != dictionary_.values) {
       scanState.dictionary = dictionary_;
+      if (hasFilter) {
+        makeFilterCache(scanState);
+      }      
     }
     scanState.updateRawState();
     dict_qpl_job_id = 0;
     waitQplJob(decode_job_id);
+    decode_job_id = 0;
     callFilter(nulls, nullsFromFastPath, visitor);
 
     if (currentVisitorRow_ < numVisitorRows_ || isMultiPage) {

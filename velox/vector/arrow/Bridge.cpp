@@ -630,7 +630,7 @@ void exportToArrow(const VectorPtr& vec, ArrowSchema& arrowSchema) {
   arrowSchema.metadata = nullptr;
 
   // All supported types are semantically nullable.
-  // arrowSchema.flags = ARROW_FLAG_NULLABLE;
+  arrowSchema.flags = ARROW_FLAG_NULLABLE;
 
   // Allocate private data buffer holder and recurse down to children types.
   auto bridgeHolder = std::make_unique<VeloxToArrowSchemaBridgeHolder>();

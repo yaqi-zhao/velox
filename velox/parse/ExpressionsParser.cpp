@@ -22,8 +22,8 @@ std::shared_ptr<const core::IExpr> parseExpr(
     const std::string& expr,
     const ParseOptions& options) {
   facebook::velox::duckdb::ParseOptions duckConversionOptions;
-  duckConversionOptions.parseDecimalAsDouble = options.parseDecimalAsDouble;
-  duckConversionOptions.parseIntegerAsBigint = options.parseIntegerAsBigint;
+  duckConversionOptions.parseDecimalAsDouble = false;
+  duckConversionOptions.parseIntegerAsBigint = false;
 
   return facebook::velox::duckdb::parseExpr(expr, duckConversionOptions);
 }

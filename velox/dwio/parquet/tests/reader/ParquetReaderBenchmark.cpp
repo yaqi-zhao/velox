@@ -26,9 +26,6 @@
 
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
-#include "velox/dwio/common/QplJobPool.h"
-
-using std::chrono::system_clock;
 
 using namespace facebook::velox;
 using namespace facebook::velox::dwio;
@@ -37,10 +34,9 @@ using namespace facebook::velox::parquet;
 using namespace facebook::velox::test;
 
 const uint32_t kNumRowsPerBatch = 60000;
-const uint32_t kNumBatches = 500;
-const uint32_t kNumRowsPerRowGroup = 60000;
+const uint32_t kNumBatches = 50;
+const uint32_t kNumRowsPerRowGroup = 10000;
 const double kFilterErrorMargin = 0.2;
-
 
 class ParquetReaderBenchmark {
  public:
@@ -48,8 +44,8 @@ class ParquetReaderBenchmark {
       : disableDictionary_(disableDictionary) {
     pool_ = memory::addDefaultLeafMemoryPool();
     dataSetBuilder_ = std::make_unique<DataSetBuilder>(*pool_.get(), 0);
-
-    auto sink = std::make_unique<LocalFileSink>("/tmp/test.parquet");
+    auto sink =
+        std::make_unique<LocalFileSink>(fileFolder_->path + "/" + fileName_);
     std::shared_ptr<::parquet::WriterProperties> writerProperties;
     if (disableDictionary_) {
       // The parquet file is in plain encoding format.
@@ -57,7 +53,7 @@ class ParquetReaderBenchmark {
           ::parquet::WriterProperties::Builder().disable_dictionary()->build();
     } else {
       // The parquet file is in dictionary encoding format.
-      writerProperties = ::parquet::WriterProperties::Builder().compression(::parquet::Compression::QPL)->build();
+      writerProperties = ::parquet::WriterProperties::Builder().build();
     }
     writer_ = std::make_unique<facebook::velox::parquet::Writer>(
         std::move(sink), *pool_, 10000, writerProperties);
@@ -126,7 +122,7 @@ class ParquetReaderBenchmark {
       const RowTypePtr& rowType) {
     dwio::common::ReaderOptions readerOpts{pool_.get()};
     auto input = std::make_unique<BufferedInput>(
-        std::make_shared<LocalReadFile>("/tmp/test.parquet"),
+        std::make_shared<LocalReadFile>(fileFolder_->path + "/" + fileName_),
         readerOpts.getMemoryPool());
 
     std::unique_ptr<Reader> reader;
@@ -203,15 +199,11 @@ class ParquetReaderBenchmark {
     folly::BenchmarkSuspender suspender;
 
     auto rowType = ROW({columnName}, {type});
-    // auto batches =
-    //     dataSetBuilder_->makeDataset(rowType, kNumBatches, kNumRowsPerBatch)
-    //         .withRowGroupSpecificData(kNumRowsPerRowGroup)
-    //         .withNullsForField(Subfield(columnName), nullsRateX100)
-    //         .build();
     auto batches =
         dataSetBuilder_->makeDataset(rowType, kNumBatches, kNumRowsPerBatch)
             .withRowGroupSpecificData(kNumRowsPerRowGroup)
-            .build();    
+            .withNullsForField(Subfield(columnName), nullsRateX100)
+            .build();
     writeToFile(*batches, true);
     std::vector<FilterSpec> filterSpecs;
 
@@ -225,7 +217,6 @@ class ParquetReaderBenchmark {
     auto scanSpec = createScanSpec(*batches, rowType, filterSpecs, hitRows);
 
     suspender.dismiss();
-    // auto startTime = system_clock::now();
 
     // Filter range is generated from a small sample data of 4096 rows. So the
     // upperBound and lowerBound are introduced to estimate the result size.
@@ -249,11 +240,6 @@ class ParquetReaderBenchmark {
         "Result Size {} and Expected Size {} Mismatch",
         resultSize,
         expected);
-    // auto curTime = system_clock::now();
-    // size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
-    //       curTime - startTime).count();
-    
-    // printf("ParquetReader_%d_%.0f_%.0f    time:%dus\n", int(nextSize), startPct, selectPct, (int)(msElapsed));        
   }
 
  private:
@@ -281,7 +267,7 @@ void run(
   BIGINT()->toString();
   benchmark.readSingleColumn(
       ParquetReaderType::NATIVE,
-      "column_1",
+      columnName,
       type,
       0,
       filterRateX100,
@@ -292,54 +278,123 @@ void run(
 #define PARQUET_BENCHMARKS_FILTER_NULLS(_type_, _name_, _filter_, _null_) \
   BENCHMARK_NAMED_PARAM(                                                  \
       run,                                                                \
-      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_60k_dict,         \
+      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_5k_dict,         \
       #_name_,                                                            \
       _type_,                                                             \
       _filter_,                                                           \
       _null_,                                                             \
-      60000,                                                               \
+      5000,                                                               \
       false);                                                             \
+  BENCHMARK_NAMED_PARAM(                                                  \
+      run,                                                                \
+      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_5k_plain,        \
+      #_name_,                                                            \
+      _type_,                                                             \
+      _filter_,                                                           \
+      _null_,                                                             \
+      5000,                                                               \
+      true);                                                              \
+  BENCHMARK_NAMED_PARAM(                                                  \
+      run,                                                                \
+      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_10k_dict,        \
+      #_name_,                                                            \
+      _type_,                                                             \
+      _filter_,                                                           \
+      _null_,                                                             \
+      10000,                                                              \
+      false);                                                             \
+  BENCHMARK_NAMED_PARAM(                                                  \
+      run,                                                                \
+      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_10k_Plain,       \
+      #_name_,                                                            \
+      _type_,                                                             \
+      _filter_,                                                           \
+      _null_,                                                             \
+      10000,                                                              \
+      true);                                                              \
+  BENCHMARK_NAMED_PARAM(                                                  \
+      run,                                                                \
+      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_20k_dict,        \
+      #_name_,                                                            \
+      _type_,                                                             \
+      _filter_,                                                           \
+      _null_,                                                             \
+      20000,                                                              \
+      false);                                                             \
+  BENCHMARK_NAMED_PARAM(                                                  \
+      run,                                                                \
+      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_20k_plain,       \
+      #_name_,                                                            \
+      _type_,                                                             \
+      _filter_,                                                           \
+      _null_,                                                             \
+      20000,                                                              \
+      true);                                                              \
+  BENCHMARK_NAMED_PARAM(                                                  \
+      run,                                                                \
+      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_50k_dict,        \
+      #_name_,                                                            \
+      _type_,                                                             \
+      _filter_,                                                           \
+      _null_,                                                             \
+      50000,                                                              \
+      false);                                                             \
+  BENCHMARK_NAMED_PARAM(                                                  \
+      run,                                                                \
+      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_50k_plain,       \
+      #_name_,                                                            \
+      _type_,                                                             \
+      _filter_,                                                           \
+      _null_,                                                             \
+      50000,                                                              \
+      true);                                                              \
+  BENCHMARK_NAMED_PARAM(                                                  \
+      run,                                                                \
+      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_100k_dict,       \
+      #_name_,                                                            \
+      _type_,                                                             \
+      _filter_,                                                           \
+      _null_,                                                             \
+      100000,                                                             \
+      false);                                                             \
+  BENCHMARK_NAMED_PARAM(                                                  \
+      run,                                                                \
+      _name_##_Filter_##_filter_##_Nulls_##_null_##_next_100k_plain,      \
+      #_name_,                                                            \
+      _type_,                                                             \
+      _filter_,                                                           \
+      _null_,                                                             \
+      100000,                                                             \
+      true);                                                              \
   BENCHMARK_DRAW_LINE();
 
 #define PARQUET_BENCHMARKS_FILTERS(_type_, _name_, _filter_)    \
-  PARQUET_BENCHMARKS_FILTER_NULLS(_type_, _name_, _filter_, 0)  
-  // PARQUET_BENCHMARKS_FILTER_NULLS(_type_, _name_, _filter_, 20) \
-  // PARQUET_BENCHMARKS_FILTER_NULLS(_type_, _name_, _filter_, 50) \
-  // PARQUET_BENCHMARKS_FILTER_NULLS(_type_, _name_, _filter_, 70) \
-  // PARQUET_BENCHMARKS_FILTER_NULLS(_type_, _name_, _filter_, 100)
+  PARQUET_BENCHMARKS_FILTER_NULLS(_type_, _name_, _filter_, 0)  \
+  PARQUET_BENCHMARKS_FILTER_NULLS(_type_, _name_, _filter_, 20) \
+  PARQUET_BENCHMARKS_FILTER_NULLS(_type_, _name_, _filter_, 50) \
+  PARQUET_BENCHMARKS_FILTER_NULLS(_type_, _name_, _filter_, 70) \
+  PARQUET_BENCHMARKS_FILTER_NULLS(_type_, _name_, _filter_, 100)
 
 #define PARQUET_BENCHMARKS(_type_, _name_)        \
   PARQUET_BENCHMARKS_FILTERS(_type_, _name_, 0)   \
-  // PARQUET_BENCHMARKS_FILTERS(_type_, _name_, 1)   \
-  // PARQUET_BENCHMARKS_FILTERS(_type_, _name_, 20)  \
-  // PARQUET_BENCHMARKS_FILTERS(_type_, _name_, 50)  \
-  // PARQUET_BENCHMARKS_FILTERS(_type_, _name_, 70)  \
-  // PARQUET_BENCHMARKS_FILTERS(_type_, _name_, 100) \
+  PARQUET_BENCHMARKS_FILTERS(_type_, _name_, 20)  \
+  PARQUET_BENCHMARKS_FILTERS(_type_, _name_, 50)  \
+  PARQUET_BENCHMARKS_FILTERS(_type_, _name_, 70)  \
+  PARQUET_BENCHMARKS_FILTERS(_type_, _name_, 100) \
   BENCHMARK_DRAW_LINE();
 
 #define PARQUET_BENCHMARKS_NO_FILTER(_type_, _name_) \
   PARQUET_BENCHMARKS_FILTERS(_type_, _name_, 100)    \
   BENCHMARK_DRAW_LINE();
 
-
-
-// PARQUET_BENCHMARKS(BOOLEAN(), BOOLEAN);
-// PARQUET_BENCHMARKS(TINYINT(), TINYINT);
-// PARQUET_BENCHMARKS(SMALLINT(), SMALLINT);
-PARQUET_BENCHMARKS(INTEGER(), INTEGER);
-
-// PARQUET_BENCHMARKS(BIGINT(), BigInt);
-// PARQUET_BENCHMARKS(DOUBLE(), Double);
-// PARQUET_BENCHMARKS_NO_FILTER(MAP(BIGINT(), BIGINT()), Map);
-// PARQUET_BENCHMARKS_NO_FILTER(ARRAY(BIGINT()), List);
+PARQUET_BENCHMARKS(BIGINT(), BigInt);
+PARQUET_BENCHMARKS(DOUBLE(), Double);
+PARQUET_BENCHMARKS_NO_FILTER(MAP(BIGINT(), BIGINT()), Map);
+PARQUET_BENCHMARKS_NO_FILTER(ARRAY(BIGINT()), List);
 
 // TODO: Add all data types
 
 int main(int argc, char** argv) {
-  // sleep(10);
-#ifdef VELOX_ENABLE_QPL  
-  dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
-#endif  
   folly::init(&argc, &argv);
   folly::runBenchmarks();
   return 0;

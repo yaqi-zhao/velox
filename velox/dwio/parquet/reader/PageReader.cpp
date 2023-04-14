@@ -161,32 +161,13 @@ const char* FOLLY_NONNULL PageReader::uncompressData(
     case thrift::CompressionCodec::GZIP: {
       dwio::common::ensureCapacity<char>(
           uncompressedData_, uncompressedSize, &pool_);
-      Qplcodec *qpl_dec=new Qplcodec(qpl_path_hardware,(qpl_compression_levels)1);
-
-      //Initjobs(qpl_path_software);
-      //qpl_dec->Getjob();
-      auto ret=qpl_dec->Decompress(
-          compressedSize,
-          (const uint8_t*)pageData,
-          uncompressedSize,
-          (uint8_t *)uncompressedData_->asMutable<char>());
-      if (ret) {
-        //qpl_dec->Freejob();
-        delete qpl_dec;
-        return uncompressedData_->as<char>();
-      } else {
-        VELOX_CHECK(
-          (ret == true),
-          "zlib inflateInit failed:");
-      }
-                
       z_stream stream;
       memset(&stream, 0, sizeof(stream));
       constexpr int WINDOW_BITS = 15;
       // Determine if this is libz or gzip from header.
       constexpr int DETECT_CODEC = 32;
       // Initialize decompressor.
-      ret = inflateInit2(&stream, WINDOW_BITS | DETECT_CODEC);
+      auto ret = inflateInit2(&stream, WINDOW_BITS | DETECT_CODEC);
       VELOX_CHECK(
           (ret == Z_OK),
           "zlib inflateInit failed: {}",
@@ -202,7 +183,7 @@ const char* FOLLY_NONNULL PageReader::uncompressData(
       stream.avail_in = static_cast<uInt>(compressedSize);
       stream.next_out =
           reinterpret_cast<Bytef*>(uncompressedData_->asMutable<char>());
-      stream.avail_out = static_cast<uInt>(uncompressedSize);        
+      stream.avail_out = static_cast<uInt>(uncompressedSize);
       ret = inflate(&stream, Z_FINISH);
       VELOX_CHECK(
           ret == Z_STREAM_END,

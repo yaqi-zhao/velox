@@ -46,6 +46,8 @@ core::TypedExprPtr parseExpr(
     const RowTypePtr& rowType,
     const parse::ParseOptions& options,
     memory::MemoryPool* pool) {
+    // options.parseDecimalAsDouble = false;
+    // options.parseIntegerAsBigint = false;
   auto untyped = parse::parseExpr(text, options);
   return core::Expressions::inferTypes(untyped, rowType, pool);
 }

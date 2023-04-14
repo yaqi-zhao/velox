@@ -140,7 +140,7 @@ class SsbBenchmark {
     if (FLAGS_use_native_parquet_reader) {
       facebook::velox::parquet::registerParquetReaderFactory(parquet::ParquetReaderType::NATIVE);
     } else {
-      facebook::velox::parquet::registerParquetReaderFactory(parquet::ParquetReaderType::QPL);
+      facebook::velox::parquet::registerParquetReaderFactory(parquet::ParquetReaderType::DUCKDB);
     }
     dwrf::registerDwrfReaderFactory();
     ioExecutor_ = std::make_unique<folly::IOThreadPoolExecutor>(8);
@@ -199,33 +199,84 @@ SsbBenchmark benchmark;
 std::shared_ptr<SsbQueryBuilder> queryBuilder;
 
 BENCHMARK(q1) {
-  const auto planContext = queryBuilder->getQueryPlan(31);
+  const auto planContext = queryBuilder->getQueryPlan(11);
   benchmark.run(planContext);
 }
 
-// BENCHMARK(q2) {
-//   const auto planContext = queryBuilder->getQueryPlan(32);
-//   benchmark.run(planContext);
-// }
+BENCHMARK(q2) {
+  const auto planContext = queryBuilder->getQueryPlan(2);
+  benchmark.run(planContext);
+}
 
-// BENCHMARK(q3) {
-//   const auto planContext = queryBuilder->getQueryPlan(33);
-//   benchmark.run(planContext);
-// }
+BENCHMARK(q3) {
+  const auto planContext = queryBuilder->getQueryPlan(3);
+  benchmark.run(planContext);
+}
 
+BENCHMARK(q4) {
+  const auto planContext = queryBuilder->getQueryPlan(4);
+  benchmark.run(planContext);
+}
 
-void run_benchmark(int query_id) {
-  functions::prestosql::registerAllScalarFunctions();
-  aggregate::prestosql::registerAllAggregateFunctions();
-  const auto queryPlan = queryBuilder->getQueryPlan(FLAGS_run_query_verbose);
+BENCHMARK(q5) {
+  const auto planContext = queryBuilder->getQueryPlan(5);
+  benchmark.run(planContext);
+}
+
+BENCHMARK(q6) {
+  const auto planContext = queryBuilder->getQueryPlan(6);
+  benchmark.run(planContext);
+}
+
+BENCHMARK(q7) {
+  const auto planContext = queryBuilder->getQueryPlan(7);
+  benchmark.run(planContext);
+}
+
+BENCHMARK(q8) {
+  const auto planContext = queryBuilder->getQueryPlan(8);
+  benchmark.run(planContext);
+}
+
+BENCHMARK(q9) {
+  const auto planContext = queryBuilder->getQueryPlan(9);
+  benchmark.run(planContext);
+}
+
+BENCHMARK(q10) {
+  const auto planContext = queryBuilder->getQueryPlan(10);
+  benchmark.run(planContext);
+}
+
+BENCHMARK(q11) {
+  const auto planContext = queryBuilder->getQueryPlan(11);
+  benchmark.run(planContext);
+}
+
+BENCHMARK(q12) {
+  const auto planContext = queryBuilder->getQueryPlan(12);
+  benchmark.run(planContext);
+}
+
+BENCHMARK(q13) {
+  const auto planContext = queryBuilder->getQueryPlan(13);
+  benchmark.run(planContext);
+}
+
+void benchmark_run(const SsbPlan& queryPlan) {
   const auto [cursor, actualResults] = benchmark.run(queryPlan);
   if (!cursor) {
     LOG(ERROR) << "Query terminated with error. Exiting";
     exit(1);
   }
   auto task = cursor->task();
-  ensureTaskCompletion(task.get());  
-  return;
+  ensureTaskCompletion(task.get());
+  const auto stats = task->taskStats();
+  // std::cout << fmt::format(
+  //               "{} Execution time: {}", FLAGS_num_threads,
+  //               succinctMillis(
+  //                   stats.executionEndTimeMs - stats.executionStartTimeMs))
+  //       << std::endl;
 }
 
 int main(int argc, char** argv) {
@@ -275,10 +326,11 @@ int main(int argc, char** argv) {
     // sleep(10);
     auto startTime = std::chrono::system_clock::now();
     std::vector<std::thread> submite_threads(FLAGS_num_threads);
-    long ITER = 1;
+    long ITER = 10;
+    const auto queryPlan = queryBuilder->getQueryPlan(FLAGS_run_query_verbose);
     for (int i = 0; i < ITER; i++) {
       for(int j = 0; j < submite_threads.size(); j++) {
-        submite_threads[j] = std::thread(run_benchmark, FLAGS_run_query_verbose);
+        submite_threads[j] = std::thread(benchmark_run, queryPlan);
       }
       for (int j = 0; j < submite_threads.size(); j++) {
         submite_threads[j].join();
@@ -288,8 +340,8 @@ int main(int argc, char** argv) {
     auto curTime = std::chrono::system_clock::now();
     size_t msElapsed = std::chrono::duration_cast<std::chrono::microseconds>(
         curTime - startTime).count();
-    int qps = ITER * FLAGS_num_threads * (long)1000000 / (long)msElapsed;
-    printf("QueryBenchmark  q%d  concurrency_%d drivers_%d time: %d us   QPS: %d\n", FLAGS_run_query_verbose, FLAGS_num_threads, FLAGS_num_drivers, (int)(msElapsed), qps);
+    double qps = ITER * FLAGS_num_threads * (long)1000000 * (double)60.0 / (long)msElapsed;
+    printf("QueryBenchmark  q%d  concurrency_%d drivers_%d time: %d us   QPM: %f\n", FLAGS_run_query_verbose, FLAGS_num_threads, FLAGS_num_drivers, (int)(msElapsed), qps);
   }
 }
 // }
