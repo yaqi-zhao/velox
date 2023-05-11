@@ -532,7 +532,7 @@ RowVectorPtr genTpchLineItem(
   // We control the buffer size based on the orders table, then allocate the
   // underlying buffer using the worst case (orderVectorSize * 7).
   size_t orderVectorSize = getVectorSize(
-      getRowCount(Table::TBL_ORDERS, scaleFactor), maxOrderRows, ordersOffset);
+      getRowCount(Table::TBL_LINEITEM, scaleFactor), maxOrderRows, ordersOffset);
   size_t lineItemUpperBound = orderVectorSize * 7;
 
   // Create schema and allocate vectors.

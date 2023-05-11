@@ -24,7 +24,6 @@ using thrift::RowGroup;
 std::unique_ptr<dwio::common::FormatData> ParquetParams::toFormatData(
     const std::shared_ptr<const dwio::common::TypeWithId>& type,
     const common::ScanSpec& /*scanSpec*/) {
-      std::cout << "type: " << type->type->kind() << std::endl;
   return std::make_unique<ParquetData>(type, metaData_.row_groups, pool());
 }
 
@@ -127,7 +126,6 @@ dwio::common::PositionProvider ParquetData::seekToRowGroup(uint32_t index) {
         type_,
         metadata.codec,
         metadata.total_compressed_size);
-    std::cout << "use qpl reader" << std::endl;
   // } else {
     // std::cout << "use native reader" << std::endl;
   }

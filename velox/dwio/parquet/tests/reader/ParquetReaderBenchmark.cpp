@@ -26,7 +26,13 @@
 #include <folly/Benchmark.h>
 #include <folly/init/Init.h>
 #include "velox/dwio/common/QplJobPool.h"
+#include "velox/tpch/gen/TpchGen.h"
+#include <unistd.h>       // for syscall()
+#include <sys/syscall.h> 
+#include <gflags/gflags.h>
 
+DEFINE_string(table_name, "part", "Data format");
+DEFINE_string(compression, "qpl", "Data format");
 using std::chrono::system_clock;
 
 using namespace facebook::velox;
@@ -36,7 +42,7 @@ using namespace facebook::velox::parquet;
 using namespace facebook::velox::test;
 
 const uint32_t kNumRowsPerBatch = 60000;
-const uint32_t kNumBatches = 500;
+const uint32_t kNumBatches = 50;
 const uint32_t kNumRowsPerRowGroup = 60000;
 const double kFilterErrorMargin = 0.2;
 
@@ -48,7 +54,9 @@ class ParquetReaderBenchmark {
     pool_ = memory::getDefaultMemoryPool();
     dataSetBuilder_ = std::make_unique<DataSetBuilder>(*pool_.get(), 0);
 
-    auto sink = std::make_unique<LocalFileSink>("/tmp/test.parquet");
+    int id = syscall(SYS_gettid);
+
+    auto sink = std::make_unique<LocalFileSink>("/tmp/test_" + FLAGS_table_name + FLAGS_compression + std::to_string(id) + ".parquet");
     std::shared_ptr<::parquet::WriterProperties> writerProperties;
     if (disableDictionary_) {
       // The parquet file is in plain encoding format.
@@ -56,10 +64,23 @@ class ParquetReaderBenchmark {
           ::parquet::WriterProperties::Builder().disable_dictionary()->build();
     } else {
       // The parquet file is in dictionary encoding format.
-      writerProperties = ::parquet::WriterProperties::Builder().compression(::parquet::Compression::QPL)->build();
+      // if (FLAGS_compression.compare("qpl") == 0) {
+      //   writerProperties = ::parquet::WriterProperties::Builder().compression(::parquet::Compression::QPL)->build();
+      // } else 
+      if (FLAGS_compression.compare("zstd") == 0) {
+        writerProperties = ::parquet::WriterProperties::Builder().compression(::parquet::Compression::ZSTD)->build();
+      } 
+      // else if (FLAGS_compression.compare("gzip") == 0) {
+      //   auto gzip_codec_options = std::make_shared<::arrow::util::GZipCodecOptions>();
+      //   gzip_codec_options->window_bits = 12;
+      //   writerProperties = ::parquet::WriterProperties::Builder().compression(::parquet::Compression::GZIP)->build();
+      // }
+      else {
+        writerProperties = ::parquet::WriterProperties::Builder().compression(::parquet::Compression::SNAPPY)->build();
+      }
     }
     writer_ = std::make_unique<facebook::velox::parquet::Writer>(
-        std::move(sink), *pool_, 10000, writerProperties);
+        std::move(sink), *pool_, 60000, writerProperties);
   }
 
   ~ParquetReaderBenchmark() {
@@ -69,9 +90,61 @@ class ParquetReaderBenchmark {
   void writeToFile(
       const std::vector<RowVectorPtr>& batches,
       bool /*forRowGroupSkip*/) {
-    for (auto& batch : batches) {
-      writer_->write(batch);
-    }
+    // for (auto& batch : batches) {
+      RowVectorPtr rowVector1;
+      std::cout << "table name: " << FLAGS_table_name;
+      if (FLAGS_table_name.compare("part") == 0) {
+        rowVector1 = facebook::velox::tpch::genTpchPart(5999989709, 0, 10);
+        // for (int i = 0; i < 10; i++) {
+          std::cout << "i: " << 0 << ", num row: " << rowVector1->size() << std::endl;
+          writer_->write(rowVector1);
+        // }
+      } else if (FLAGS_table_name.compare("region") == 0) {
+        rowVector1 = facebook::velox::tpch::genTpchRegion(5999989709, 0, 10);
+          writer_->write(rowVector1);
+      } else if (FLAGS_table_name.compare("partsupp") == 0) {
+        rowVector1 = facebook::velox::tpch::genTpchPartSupp(5999989709, 0, 10);
+        // for (int i = 0; i < 10; i++) {
+          std::cout << "i: " << 0 << ", num row: " << rowVector1->size() << std::endl;
+          writer_->write(rowVector1);
+        // }        
+      } else if (FLAGS_table_name.compare("supplier") == 0) {
+        rowVector1 = facebook::velox::tpch::genTpchSupplier(5999989709, 0, 10);
+        writer_->write(rowVector1);
+      } else if (FLAGS_table_name.compare("nation") == 0)  {
+        rowVector1 = facebook::velox::tpch::genTpchNation(25, 0, 10);
+        writer_->write(rowVector1);
+      } else if (FLAGS_table_name.compare("orders") == 0)  {
+        rowVector1 = facebook::velox::tpch::genTpchOrders(5999989709, 0, 10);
+        // for (int i = 0; i < 10; i++) {
+          std::cout << "i: " << 0 << ", num row: " << rowVector1->size() << std::endl;
+          writer_->write(rowVector1);
+        // }             
+      } else if (FLAGS_table_name.compare("customer") == 0)  {
+        rowVector1 = facebook::velox::tpch::genTpchCustomer(5999989709, 0, 10);
+        // for (int i = 0; i < 10; i++) {
+          std::cout << "i: " << 0 << ", num row: " << rowVector1->size() << std::endl;
+          writer_->write(rowVector1);
+        // }           
+      } else if (FLAGS_table_name.compare("lineitem") == 0)  {
+        rowVector1 = facebook::velox::tpch::genTpchLineItem(1200000);
+        for (int i = 0; i < 5; i++) {
+          std::cout << "i: " << 0 << ", num row: " << rowVector1->size() << std::endl;
+          writer_->write(rowVector1);
+        }            
+      } else if (FLAGS_table_name.compare("lineorder_flat") == 0) {
+        rowVector1 = facebook::velox::tpch::genTpchLineOrderFlat(120000);
+        for (int i = 0; i < 50; i++) {
+          std::cout << "i: " << i << ", num row: " << rowVector1->size() << std::endl;
+          writer_->write(rowVector1);
+        }          
+      } else {
+        for (auto& batch : batches) {
+          writer_->write(batch);
+        }
+      }
+      std::cout << "success write " << FLAGS_table_name << std::endl;
+    // }
     writer_->flush();
   }
 
@@ -276,7 +349,7 @@ void run(
   BIGINT()->toString();
   benchmark.readSingleColumn(
       ParquetReaderType::NATIVE,
-      "column_1",
+      "lo_orderkey",
       type,
       0,
       filterRateX100,
