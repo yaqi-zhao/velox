@@ -81,6 +81,7 @@ option(VELOX_ENABLE_CCACHE "Use ccache if installed." ON)
 option(VELOX_BUILD_TEST_UTILS "Builds Velox test utilities" OFF)
 option(VELOX_BUILD_PYTHON_PACKAGE "Builds Velox Python bindings" OFF)
 option(VELOX_BUILD_BENCHMARKS "Builds Velox benchmarks" OFF)
+option(VELOX_ENABLE_QPL "Enable Intel QPL support" OFF)
 
 if(${VELOX_BUILD_MINIMAL})
   # Enable and disable components for velox base build
@@ -195,6 +196,10 @@ if(VELOX_ENABLE_PARQUET)
   set(VELOX_ENABLE_ARROW ON)
 endif()
 
+if(VELOX_ENABLE_QPL)
+  add_definitions(-DVELOX_ENABLE_QPL)
+endif()
+
 # Turn on Codegen only for Clang and non Mac systems.
 if((NOT DEFINED VELOX_CODEGEN_SUPPORT)
    AND (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -246,7 +251,8 @@ if(COMMAND_STATUS EQUAL "1")
 endif()
 message("Setting CMAKE_CXX_FLAGS=${SCRIPT_CXX_FLAGS}")
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SCRIPT_CXX_FLAGS}")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SCRIPT_CXX_FLAGS} -mwaitpkg -ldl -laccel-config -L/usr/lib64")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SCRIPT_CXX_FLAGS} -mwaitpkg -ldl -laccel-config -L/usr/lib64")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D USE_VELOX_COMMON_BASE")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D HAS_UNCAUGHT_EXCEPTIONS")
@@ -383,6 +389,8 @@ if(${VELOX_BUILD_PYTHON_PACKAGE})
   resolve_dependency(pybind11 2.10.0)
   add_subdirectory(pyvelox)
 endif()
+
+link_directories("/usr/lib64/")
 
 # Locate or build folly.
 add_compile_definitions(FOLLY_HAVE_INT128_T=1)

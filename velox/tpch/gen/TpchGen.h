@@ -44,6 +44,7 @@ enum class Table : uint8_t {
   TBL_LINEITEM,
   TBL_NATION,
   TBL_REGION,
+  TBL_LINEORDER_FLAT,
 };
 
 /// Returns table name as a string.

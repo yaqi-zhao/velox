@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#pragma once
+
 #include "velox/buffer/Buffer.h"
 
 namespace facebook::velox::dwio::common {
