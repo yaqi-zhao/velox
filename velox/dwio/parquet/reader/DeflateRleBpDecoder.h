@@ -45,8 +45,8 @@ class DeflateRleBpDecoder {
         : pageData_(pageData),
           pageHeader_(pageHeader),
           type_(type),
-          pool_(pool),
           decoded_values_(NULL),
+          pool_(pool),
           cur_visitor_pos(0) {}
 
 
