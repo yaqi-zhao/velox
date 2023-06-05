@@ -21,19 +21,20 @@
 #include "velox/dwio/common/DirectDecoder.h"
 #include "velox/dwio/common/SelectiveColumnReader.h"
 #include "velox/dwio/parquet/reader/BooleanDecoder.h"
-#include "velox/dwio/parquet/reader/ParquetTypeWithId.h"
+#include "velox/dwio/parquet/reader/DeflateRleBpDecoder.h"
 #include "velox/dwio/parquet/reader/RleBpDataDecoder.h"
 #include "velox/dwio/parquet/reader/StringDecoder.h"
 #include "velox/vector/BaseVector.h"
 
+#ifdef VELOX_ENABLE_QPL
 namespace facebook::velox::parquet {
 
 /// Manages access to pages inside a ColumnChunk. Interprets page headers and
 /// encodings and presents the combination of pages and encoded values as a
 /// continuous stream accessible via readWithVisitor().
-class PageReader {
+class QplPageReader {
  public:
-  PageReader(
+  QplPageReader(
       std::unique_ptr<dwio::common::SeekableInputStream> stream,
       memory::MemoryPool& pool,
       ParquetTypeWithIdPtr nodeType,
@@ -52,7 +53,7 @@ class PageReader {
   }
 
   // This PageReader constructor is for unit test only.
-  PageReader(
+  QplPageReader(
       std::unique_ptr<dwio::common::SeekableInputStream> stream,
       memory::MemoryPool& pool,
       thrift::CompressionCodec::type codec,
@@ -129,6 +130,8 @@ class PageReader {
   // Parses the PageHeader at 'inputStream_', and move the bufferStart_ and
   // bufferEnd_ to the corresponding positions.
   thrift::PageHeader readPageHeader();
+  void prepareDict(const thrift::PageHeader& pageHeader);
+  void waitQplJob(uint32_t job_id);
 
  private:
   // Indicates that we only want the repdefs for the next page. Used when
@@ -153,7 +156,9 @@ class PageReader {
 
   // Makes a decoder based on 'encoding_' for bytes from ''pageData_' to
   // 'pageData_' + 'encodedDataSize_'.
-  void makedecoder();
+//   void makedecoder();
+
+  void makeDecoder(thrift::PageHeader pageHeader);
 
   // Reads and skips pages until finding a data page that contains
   // 'row'. Reads and sets 'rowOfPage_' and 'numRowsInPage_' and
@@ -184,13 +189,13 @@ class PageReader {
   void prepareDataPageV1(const thrift::PageHeader& pageHeader, int64_t row);
   void prepareDataPageV2(const thrift::PageHeader& pageHeader, int64_t row);
   void prepareDictionary(const thrift::PageHeader& pageHeader);
-  void makeDecoder();
 
   // For a non-top level leaf, reads the defs and sets 'leafNulls_' and
   // 'numRowsInPage_' accordingly. This is used for non-top level leaves when
   // 'hasChunkRepDefs_' is false.
   void readPageDefLevels();
 
+  void uncompressDictPage();
   // Returns a pointer to contiguous space for the next 'size' bytes
   // from current position. Copies data into 'copy' if the range
   // straddles buffers. Allocates or resizes 'copy' as needed.
@@ -202,7 +207,8 @@ class PageReader {
   const char* FOLLY_NONNULL uncompressData(
       const char* FOLLY_NONNULL pageData,
       uint32_t compressedSize,
-      uint32_t uncompressedSize);
+      uint32_t uncompressedSize,
+      BufferPtr& uncompressedData_);
 
   template <typename T>
   T readField(const char* FOLLY_NONNULL& ptr) {
@@ -240,6 +246,35 @@ class PageReader {
       folly::Range<const vector_size_t*>& rows,
       const uint64_t* FOLLY_NULLABLE& nulls);
 
+  template <
+      typename Visitor,
+      typename std::enable_if<
+              std::is_same_v<typename Visitor::DataType, int32_t>,
+          int>::type = 0>
+  void callFilter(
+      const uint64_t* FOLLY_NULLABLE nulls,
+      bool& nullsFromFastPath,
+      Visitor visitor) {
+      if (isDictionary()) {
+        auto dictVisitor = visitor.toDictionaryColumnVisitor();
+        dictionaryIdQplDecoder_->filterWithVisitor<false>(nullptr, dictVisitor);
+      } else {
+        std::cout << "error path" << std::endl;
+      }
+  }
+
+  template <
+      typename Visitor,
+      typename std::enable_if<
+              !std::is_same_v<typename Visitor::DataType, int32_t>,
+          int>::type = 0>
+  void callFilter(
+      const uint64_t* FOLLY_NULLABLE nulls,
+      bool& nullsFromFastPath,
+      Visitor visitor) {
+      return;
+  }
+
   // Calls the visitor, specialized on the data type since not all visitors
   // apply to all types.
   template <
@@ -248,7 +283,7 @@ class PageReader {
           !std::is_same_v<typename Visitor::DataType, folly::StringPiece> &&
               !std::is_same_v<typename Visitor::DataType, int8_t>,
           int>::type = 0>
-  void callDecoder(
+  uint32_t callDecoder(
       const uint64_t* FOLLY_NULLABLE nulls,
       bool& nullsFromFastPath,
       Visitor visitor) {
@@ -267,12 +302,13 @@ class PageReader {
     } else {
       if (isDictionary()) {
         auto dictVisitor = visitor.toDictionaryColumnVisitor();
-        dictionaryIdDecoder_->readWithVisitor<false>(nullptr, dictVisitor);
+        return dictionaryIdQplDecoder_->rleDecode();
       } else {
         directDecoder_->readWithVisitor<false>(
             nulls, visitor, !this->type_->type->isShortDecimal());
       }
     }
+    return 0;
   }
 
   template <
@@ -280,7 +316,7 @@ class PageReader {
       typename std::enable_if<
           std::is_same_v<typename Visitor::DataType, folly::StringPiece>,
           int>::type = 0>
-  void callDecoder(
+  uint32_t callDecoder(
       const uint64_t* FOLLY_NULLABLE nulls,
       bool& nullsFromFastPath,
       Visitor visitor) {
@@ -301,6 +337,7 @@ class PageReader {
         stringDecoder_->readWithVisitor<false>(nulls, visitor);
       }
     }
+    return 0;
   }
 
   template <
@@ -308,7 +345,7 @@ class PageReader {
       typename std::enable_if<
           std::is_same_v<typename Visitor::DataType, int8_t>,
           int>::type = 0>
-  void callDecoder(
+  uint32_t callDecoder(
       const uint64_t* FOLLY_NULLABLE nulls,
       bool& nullsFromFastPath,
       Visitor visitor) {
@@ -319,6 +356,7 @@ class PageReader {
     } else {
       booleanDecoder_->readWithVisitor<false>(nulls, visitor);
     }
+    return 0;
   }
 
   // Returns the number of passed rows/values gathered by
@@ -406,7 +444,8 @@ class PageReader {
   BufferPtr pageBuffer_;
 
   // Uncompressed data for the page. Rep-def-data in V1, data alone in V2.
-  BufferPtr uncompressedData_;
+  BufferPtr uncompressedDictData_;
+  BufferPtr uncompressedDataData_;
 
   // First byte of uncompressed encoded data. Contains the encoded data as a
   // contiguous run of bytes.
@@ -415,6 +454,16 @@ class PageReader {
   // Dictionary contents.
   dwio::common::DictionaryValues dictionary_;
   thrift::Encoding::type dictionaryEncoding_;
+  thrift::PageHeader dictionaryPageHeader_;
+  const char* FOLLY_NULLABLE dictPageData_{nullptr};
+  std::unique_ptr<DeflateRleBpDecoder> dictionaryIdQplDecoder_;
+  bool needUncompressDict;
+
+  const char* FOLLY_NULLABLE dataPageData_{nullptr};
+
+  uint32_t dict_qpl_job_id;
+  qpl_status dict_qpl_job_status;
+  uint32_t decode_job_id;
 
   // Offset of current page's header from start of ColumnChunk.
   uint64_t pageStart_{0};
@@ -476,7 +525,7 @@ class PageReader {
 };
 
 template <typename Visitor>
-void PageReader::readWithVisitor(Visitor& visitor) {
+void QplPageReader::readWithVisitor(Visitor& visitor) {
   constexpr bool hasFilter =
       !std::is_same_v<typename Visitor::FilterType, common::AlwaysTrue>;
   constexpr bool filterOnly =
@@ -498,11 +547,50 @@ void PageReader::readWithVisitor(Visitor& visitor) {
     visitor.setNumValuesBias(numValuesBeforePage);
     visitor.setRows(pageRows);
     auto startTime = std::chrono::system_clock::now();
-    callDecoder(nulls, nullsFromFastPath, visitor);
+    if (codec_ != thrift::CompressionCodec::QPL) {
+      decode_job_id = callDecoder(nulls, nullsFromFastPath, visitor);
+    }
     auto curTime = std::chrono::system_clock::now();
-    auto  msElapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+    size_t msElapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        curTime - startTime).count(); 
+    printf("Subimit decode job  time: %d ns   \n", (int)(msElapsed));
+    // process dict qpl job
+    if (dict_qpl_job_id == 0 && needUncompressDict) {
+      uncompressDictPage();
+    }
+    auto curTime_1 = std::chrono::system_clock::now();
+    msElapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        curTime_1 - curTime).count(); 
+    printf("uncompressDictPage  time: %d ns   \n", (int)(msElapsed));
+    waitQplJob(dict_qpl_job_id);
+    
+    prepareDict(dictionaryPageHeader_);
+    needUncompressDict = false;
+
+    auto& scanState = reader.scanState();
+    if (scanState.dictionary.values != dictionary_.values) {
+      scanState.dictionary = dictionary_;
+      if (hasFilter) {
+        makeFilterCache(scanState);
+      }      
+    }
+    scanState.updateRawState();
+    dict_qpl_job_id = 0;
+    if (decode_job_id > 0) {
+      waitQplJob(decode_job_id);
+      curTime = std::chrono::system_clock::now();
+      msElapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
           curTime - startTime).count(); 
-    printf("rledecode + dictionary decoder  time: %d ns   \n", (int)(msElapsed));
+      printf("rledecode  time: %d ns   \n", (int)(msElapsed));
+    }
+    decode_job_id = 0;
+    callFilter(nulls, nullsFromFastPath, visitor);
+
+    startTime = std::chrono::system_clock::now();
+    msElapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        startTime - curTime).count(); 
+    printf("Dictonary decoder  time: %d ns   \n", (int)(msElapsed));
+
     if (currentVisitorRow_ < numVisitorRows_ || isMultiPage) {
       if (mayProduceNulls) {
         if (!isMultiPage) {
@@ -553,3 +641,4 @@ void PageReader::readWithVisitor(Visitor& visitor) {
 }
 
 } // namespace facebook::velox::parquet
+#endif

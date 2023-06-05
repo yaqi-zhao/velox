@@ -13,9 +13,33 @@
 # limitations under the License.
 
 add_executable(velox_tpch_benchmark TpchBenchmark.cpp)
+add_executable(velox_ssb_benchmark SsbBenchmark.cpp)
 
 target_link_libraries(
   velox_tpch_benchmark
+  velox_aggregates
+  velox_exec
+  velox_exec_test_lib
+  velox_dwio_common
+  velox_dwio_common_exception
+  velox_dwio_parquet_reader
+  velox_dwio_type_fbhive
+  velox_dwio_common_test_utils
+  velox_hive_connector
+  velox_exception
+  velox_memory
+  velox_process
+  velox_serialization
+  velox_encode
+  velox_type
+  velox_caching
+  velox_vector_test_lib
+  ${FOLLY_WITH_DEPENDENCIES}
+  ${FOLLY_BENCHMARK}
+  ${FMT})
+
+target_link_libraries(
+  velox_ssb_benchmark
   velox_aggregates
   velox_exec
   velox_exec_test_lib

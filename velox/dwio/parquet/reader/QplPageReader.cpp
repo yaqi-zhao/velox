@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "velox/dwio/parquet/reader/PageReader.h"
+#include "velox/dwio/parquet/reader/QplPageReader.h"
 #include "velox/dwio/common/BufferUtil.h"
 #include "velox/dwio/common/ColumnVisitors.h"
 #include "velox/dwio/parquet/reader/NestedStructureDecoder.h"
@@ -27,12 +27,13 @@
 #include <zstd.h>
 #include "compression_qpl.h"
 
+#ifdef VELOX_ENABLE_QPL
 namespace facebook::velox::parquet {
 
 using thrift::Encoding;
 using thrift::PageHeader;
 
-void PageReader::seekToPage(int64_t row) {
+void QplPageReader::seekToPage(int64_t row) {
   defineDecoder_.reset();
   repeatDecoder_.reset();
   // 'rowOfPage_' is the row number of the first row of the next page.
@@ -56,6 +57,8 @@ void PageReader::seekToPage(int64_t row) {
         prepareDataPageV2(pageHeader, row);
         break;
       case thrift::PageType::DICTIONARY_PAGE:
+        dict_qpl_job_id = 0;
+        dict_qpl_job_status = QPL_STS_BEING_PROCESSED;
         if (row == kRepDefOnly) {
           skipBytes(
               pageHeader.compressed_page_size,
@@ -76,7 +79,7 @@ void PageReader::seekToPage(int64_t row) {
   }
 }
 
-PageHeader PageReader::readPageHeader() {
+PageHeader QplPageReader::readPageHeader() {
   if (bufferEnd_ == bufferStart_) {
     const void* buffer;
     int32_t size;
@@ -98,7 +101,7 @@ PageHeader PageReader::readPageHeader() {
   return pageHeader;
 }
 
-const char* PageReader::readBytes(int32_t size, BufferPtr& copy) {
+const char* QplPageReader::readBytes(int32_t size, BufferPtr& copy) {
   if (bufferEnd_ == bufferStart_) {
     const void* buffer = nullptr;
     int32_t bufferSize = 0;
@@ -122,10 +125,44 @@ const char* PageReader::readBytes(int32_t size, BufferPtr& copy) {
   return copy->as<char>();
 }
 
-const char* FOLLY_NONNULL PageReader::uncompressData(
+inline const char* Parse32WithLimit(const char* p,
+                                            const char* l,
+                                            uint32_t* OUTPUT) {
+  const unsigned char* ptr = reinterpret_cast<const unsigned char*>(p);
+  const unsigned char* limit = reinterpret_cast<const unsigned char*>(l);
+  uint32_t b, result;
+  if (ptr >= limit) return NULL;
+  b = *(ptr++); result = b & 127;          if (b < 128) goto done;
+  if (ptr >= limit) return NULL;
+  b = *(ptr++); result |= (b & 127) <<  7; if (b < 128) goto done;
+  if (ptr >= limit) return NULL;
+  b = *(ptr++); result |= (b & 127) << 14; if (b < 128) goto done;
+  if (ptr >= limit) return NULL;
+  b = *(ptr++); result |= (b & 127) << 21; if (b < 128) goto done;
+  if (ptr >= limit) return NULL;
+  b = *(ptr++); result |= (b & 127) << 28; if (b < 16) goto done;
+  return NULL;       // Value is too long to be a varint32
+ done:
+  *OUTPUT = result;
+  return reinterpret_cast<const char*>(ptr);
+}
+
+bool GetUncompressedLength(const char* start, size_t n, size_t* result) {
+  uint32_t v = 0;
+  const char* limit = start + n;
+  if (Parse32WithLimit(start, limit, &v) != NULL) {
+    *result = v;
+    return true;
+  } else {
+    return false;
+  }
+}
+
+const char* FOLLY_NONNULL QplPageReader::uncompressData(
     const char* pageData,
     uint32_t compressedSize,
-    uint32_t uncompressedSize) {
+    uint32_t uncompressedSize,
+    BufferPtr& uncompressedData_) {
   switch (codec_) {
     case thrift::CompressionCodec::UNCOMPRESSED:
       return pageData;
@@ -134,7 +171,7 @@ const char* FOLLY_NONNULL PageReader::uncompressData(
           uncompressedData_, uncompressedSize, &pool_);
 
       size_t sizeFromSnappy;
-      if (!snappy::GetUncompressedLength(
+      if (!GetUncompressedLength(
               pageData, compressedSize, &sizeFromSnappy)) {
         VELOX_FAIL("Snappy uncompressed size not available");
       }
@@ -196,20 +233,20 @@ const char* FOLLY_NONNULL PageReader::uncompressData(
       dwio::common::ensureCapacity<char>(
         uncompressedData_, uncompressedSize, &pool_);
 
-      Qplcodec *qpl_dec=new Qplcodec(qpl_path_hardware,(qpl_compression_levels)1);
+      Qplcodec qpl_dec(qpl_path_hardware,(qpl_compression_levels)1);
 
       //Initjobs(qpl_path_software);
       //qpl_dec->Getjob();
-      auto ret=qpl_dec->Decompress(
+      dict_qpl_job_id = qpl_dec.DecompressAsync(
           compressedSize,
           (const uint8_t*)pageData,
           uncompressedSize,
           (uint8_t *)uncompressedData_->asMutable<char>());
-      if(ret){
-        //qpl_dec->Freejob();
-        delete qpl_dec;
-        return uncompressedData_->as<char>();
-      }
+      return nullptr;
+    //   if(ret){
+    //     delete qpl_dec;
+    //     return uncompressedData_->as<char>();
+    //   }
     }
 #endif    
     default:
@@ -217,7 +254,7 @@ const char* FOLLY_NONNULL PageReader::uncompressData(
   }
 }
 
-void PageReader::setPageRowInfo(bool forRepDef) {
+void QplPageReader::setPageRowInfo(bool forRepDef) {
   if (isTopLevel_ || forRepDef || maxRepeat_ == 0) {
     numRowsInPage_ = numRepDefsInPage_;
   } else if (hasChunkRepDefs_) {
@@ -233,7 +270,7 @@ void PageReader::setPageRowInfo(bool forRepDef) {
   }
 }
 
-void PageReader::readPageDefLevels() {
+void QplPageReader::readPageDefLevels() {
   VELOX_CHECK(kRowsUnknown == numRowsInPage_ || maxDefine_ > 1);
   definitionLevels_.resize(numRepDefsInPage_);
   wideDefineDecoder_->GetBatch(definitionLevels_.data(), numRepDefsInPage_);
@@ -252,14 +289,14 @@ void PageReader::readPageDefLevels() {
   numLeafNullsConsumed_ = 0;
 }
 
-void PageReader::updateRowInfoAfterPageSkipped() {
+void QplPageReader::updateRowInfoAfterPageSkipped() {
   rowOfPage_ += numRowsInPage_;
   if (hasChunkRepDefs_) {
     numLeafNullsConsumed_ = rowOfPage_;
   }
 }
 
-void PageReader::prepareDataPageV1(const PageHeader& pageHeader, int64_t row) {
+void QplPageReader::prepareDataPageV1(const PageHeader& pageHeader, int64_t row) {
   auto startTime = std::chrono::system_clock::now();
   VELOX_CHECK(
       pageHeader.type == thrift::PageType::DATA_PAGE &&
@@ -277,14 +314,23 @@ void PageReader::prepareDataPageV1(const PageHeader& pageHeader, int64_t row) {
     return;
   }
   pageData_ = readBytes(pageHeader.compressed_page_size, pageBuffer_);
+  encoding_ = pageHeader.data_page_header.encoding;
   auto curTime_1 = std::chrono::system_clock::now(); 
   auto msElapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
         curTime_1 - startTime).count(); 
-  printf("read data page  time: %d ns   \n", (int)(msElapsed));
-  pageData_ = uncompressData(
-      pageData_,
-      pageHeader.compressed_page_size,
-      pageHeader.uncompressed_page_size);
+    printf("read data page  time: %d ns   \n", (int)(msElapsed));
+  if (codec_ == thrift::CompressionCodec::QPL) {
+    dictionaryIdQplDecoder_ = std::make_unique<DeflateRleBpDecoder>(
+            pageData_, pageHeader, pageHeader.uncompressed_page_size, type_, pool_);
+    decode_job_id = dictionaryIdQplDecoder_->rleDecompress();
+  } else {
+    pageData_ = uncompressData(
+        pageData_,
+        pageHeader.compressed_page_size,
+        pageHeader.uncompressed_page_size,
+        uncompressedDataData_);
+
+  }
   auto pageEnd = pageData_ + pageHeader.uncompressed_page_size;
   if (maxRepeat_ > 0) {
     uint32_t repeatLength = readField<int32_t>(pageData_);
@@ -313,21 +359,61 @@ void PageReader::prepareDataPageV1(const PageHeader& pageHeader, int64_t row) {
   }
   encodedDataSize_ = pageEnd - pageData_;
 
-  encoding_ = pageHeader.data_page_header.encoding;
+  
   if (!hasChunkRepDefs_ && (numRowsInPage_ == kRowsUnknown || maxDefine_ > 1)) {
     readPageDefLevels();
   }
-
-  if (row != kRepDefOnly) {
-    makeDecoder();
-  }
+  if (row != kRepDefOnly && codec_ != thrift::CompressionCodec::QPL) {
+      makeDecoder(pageHeader);
+    }
   startTime = std::chrono::system_clock::now(); 
   msElapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
-      startTime -  curTime_1).count(); 
+        startTime - curTime_1).count(); 
     printf("uncompress data page  time: %d ns   \n", (int)(msElapsed));
 }
 
-void PageReader::prepareDataPageV2(const PageHeader& pageHeader, int64_t row) {
+// void QplPageReader::prepareDataPageV1(const PageHeader& pageHeader, int64_t row) {
+//   VELOX_CHECK(
+//       pageHeader.type == thrift::PageType::DATA_PAGE &&
+//       pageHeader.__isset.data_page_header);
+//   numRepDefsInPage_ = pageHeader.data_page_header.num_values;
+//   setPageRowInfo(row == kRepDefOnly);
+//   if (row != kRepDefOnly && numRowsInPage_ != kRowsUnknown &&
+//       numRowsInPage_ + rowOfPage_ <= row) {
+//     dwio::common::skipBytes(
+//         pageHeader.compressed_page_size,
+//         inputStream_.get(),
+//         bufferStart_,
+//         bufferEnd_);
+
+//     return;
+//   }
+//   dataPageData_ = readBytes(pageHeader.compressed_page_size, pageBuffer_);
+//   dictionaryIdQplDecoder_ = std::make_unique<DeflateRleBpDecoder>(
+//            dataPageData_, pageHeader, type_, pool_);
+//   decode_job_id = dictionaryIdQplDecoder_->rleDecode();
+//   pageData_ = dataPageData_;
+//   if (maxRepeat_ > 0) {
+//     std::cout << "Error: max Repeat cannot bigger than 0." << std::endl;
+//     throw std::runtime_error("Error: max Repeat cannot bigger than 0");
+//   }
+
+//   if (maxDefine_ > 0) {
+//     throw std::runtime_error("Error: maxDefine_ cannot bigger than 0");
+//   }
+// //   encodedDataSize_ = pageEnd - pageData_;
+
+//   encoding_ = pageHeader.data_page_header.encoding;
+//   if (!hasChunkRepDefs_ && (numRowsInPage_ == kRowsUnknown || maxDefine_ > 1)) {
+//     readPageDefLevels();
+//   }
+
+//   // if (row != kRepDefOnly) {
+//   //   makeDecoder(pageHeader);
+//   // }
+// }
+
+void QplPageReader::prepareDataPageV2(const PageHeader& pageHeader, int64_t row) {
   VELOX_CHECK(pageHeader.__isset.data_page_header_v2);
   numRepDefsInPage_ = pageHeader.data_page_header_v2.num_values;
   setPageRowInfo(row == kRepDefOnly);
@@ -370,7 +456,8 @@ void PageReader::prepareDataPageV2(const PageHeader& pageHeader, int64_t row) {
     pageData_ = uncompressData(
         pageData_,
         pageHeader.compressed_page_size - levelsSize,
-        pageHeader.uncompressed_page_size - levelsSize);
+        pageHeader.uncompressed_page_size - levelsSize,
+        uncompressedDataData_);
   }
   if (row == kRepDefOnly) {
     skipBytes(bytes, inputStream_.get(), bufferStart_, bufferEnd_);
@@ -383,12 +470,71 @@ void PageReader::prepareDataPageV2(const PageHeader& pageHeader, int64_t row) {
     readPageDefLevels();
   }
   if (row != kRepDefOnly) {
-    makeDecoder();
+    makeDecoder(pageHeader);
   }
 }
 
-void PageReader::prepareDictionary(const PageHeader& pageHeader) {
+void QplPageReader::waitQplJob(uint32_t job_id) {
+  dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
+  if (job_id <= 0 || job_id >= qpl_job_pool.MAX_JOB_NUMBER) {
+    return;
+  }
+
+  qpl_job* job = qpl_job_pool.GetJobById(job_id);
+  auto status = qpl_check_job(job);
+  uint32_t check_time = 0;
+  while (status == QPL_STS_BEING_PROCESSED && check_time < UINT32_MAX - 1)
+  {
+      // _tpause(1, __rdtsc() + 1000);
+      _umwait(1, __rdtsc() + 8000);
+      status = qpl_check_job(job);
+      check_time++;
+  } 
+  
+  qpl_fini_job(job);
+  if (job_id == dict_qpl_job_id) {
+    dict_qpl_job_status = status;
+  } 
+  qpl_job_pool.ReleaseJob(job_id);
+  VELOX_DCHECK(status == QPL_STS_OK, "Check of QPL Job failed, status: {}, job_id: {}, sys_id: {}", status, job_id);
+}
+
+void QplPageReader::prepareDictionary(const PageHeader& pageHeader) {
+  dictionary_.numValues = pageHeader.dictionary_page_header.num_values;
+  dictionaryEncoding_ = pageHeader.dictionary_page_header.encoding;
+  dictionary_.sorted = pageHeader.dictionary_page_header.__isset.is_sorted &&
+      pageHeader.dictionary_page_header.is_sorted;
+  dictionaryPageHeader_ = pageHeader;
+  VELOX_CHECK(
+      dictionaryEncoding_ == Encoding::PLAIN_DICTIONARY ||
+      dictionaryEncoding_ == Encoding::PLAIN);
+
+  if (codec_ != thrift::CompressionCodec::UNCOMPRESSED) {
   auto startTime = std::chrono::system_clock::now();
+    dictPageData_ = readBytes(pageHeader.compressed_page_size, pageBuffer_);
+  auto curTime = std::chrono::system_clock::now();
+    size_t msElapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        curTime - startTime).count(); 
+    printf("read dict page time: %d ns   \n", (int)(msElapsed));
+    needUncompressDict = true;
+    // uncompressDictPage();
+  }
+  return;
+}
+
+void QplPageReader::uncompressDictPage() {
+  if (codec_ != thrift::CompressionCodec::UNCOMPRESSED) {  
+    dictPageData_ = uncompressData(
+        dictPageData_,
+        dictionaryPageHeader_.compressed_page_size,
+        dictionaryPageHeader_.uncompressed_page_size,
+        uncompressedDictData_);
+    needUncompressDict = false;
+  }
+  return;
+}
+
+void QplPageReader::prepareDict(const PageHeader& pageHeader) {
   dictionary_.numValues = pageHeader.dictionary_page_header.num_values;
   dictionaryEncoding_ = pageHeader.dictionary_page_header.encoding;
   dictionary_.sorted = pageHeader.dictionary_page_header.__isset.is_sorted &&
@@ -397,21 +543,7 @@ void PageReader::prepareDictionary(const PageHeader& pageHeader) {
       dictionaryEncoding_ == Encoding::PLAIN_DICTIONARY ||
       dictionaryEncoding_ == Encoding::PLAIN);
 
-  if (codec_ != thrift::CompressionCodec::UNCOMPRESSED) {
-    pageData_ = readBytes(pageHeader.compressed_page_size, pageBuffer_);
-    auto curTime_1 = std::chrono::system_clock::now(); 
-    auto msElapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
-        curTime_1 - startTime).count(); 
-    printf("read dict page  time: %d ns   \n", (int)(msElapsed));
-    pageData_ = uncompressData(
-        pageData_,
-        pageHeader.compressed_page_size,
-        pageHeader.uncompressed_page_size);
-    startTime = std::chrono::system_clock::now();
-    msElapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
-        startTime - curTime_1).count(); 
-    printf("uncompressDictPage  time: %d ns   \n", (int)(msElapsed));
-  }
+  dictPageData_ = uncompressedDictData_->as<char>();
 
   auto parquetType = type_->parquetType_.value();
   switch (parquetType) {
@@ -432,8 +564,8 @@ void PageReader::prepareDictionary(const PageHeader& pageHeader) {
       } else {
         dictionary_.values = AlignedBuffer::allocate<char>(numBytes, &pool_);
       }
-      if (pageData_) {
-        memcpy(dictionary_.values->asMutable<char>(), pageData_, numBytes);
+      if (dictPageData_) {
+        memcpy(dictionary_.values->asMutable<char>(), dictPageData_, numBytes);
       } else {
         dwio::common::readBytes(
             numBytes,
@@ -460,8 +592,8 @@ void PageReader::prepareDictionary(const PageHeader& pageHeader) {
       auto values = dictionary_.values->asMutable<StringView>();
       dictionary_.strings = AlignedBuffer::allocate<char>(numBytes, &pool_);
       auto strings = dictionary_.strings->asMutable<char>();
-      if (pageData_) {
-        memcpy(strings, pageData_, numBytes);
+      if (dictPageData_) {
+        memcpy(strings, dictPageData_, numBytes);
       } else {
         dwio::common::readBytes(
             numBytes, inputStream_.get(), strings, bufferStart_, bufferEnd_);
@@ -483,8 +615,8 @@ void PageReader::prepareDictionary(const PageHeader& pageHeader) {
       dictionary_.values = AlignedBuffer::allocate<char>(numVeloxBytes, &pool_);
       auto data = dictionary_.values->asMutable<char>();
       // Read the data bytes.
-      if (pageData_) {
-        memcpy(data, pageData_, numParquetBytes);
+      if (dictPageData_) {
+        memcpy(data, dictPageData_, numParquetBytes);
       } else {
         dwio::common::readBytes(
             numParquetBytes,
@@ -511,10 +643,9 @@ void PageReader::prepareDictionary(const PageHeader& pageHeader) {
             values[i] = value;
           }
         }
-        auto values = dictionary_.values->asMutable<UnscaledShortDecimal>();
+        auto values = dictionary_.values->asMutable<int64_t>();
         for (auto i = 0; i < dictionary_.numValues; ++i) {
-          values[i] = UnscaledShortDecimal(
-              __builtin_bswap64(values[i].unscaledValue()));
+          values[i] = __builtin_bswap64(values[i]);
         }
         break;
       } else if (type_->type->isLongDecimal()) {
@@ -535,10 +666,9 @@ void PageReader::prepareDictionary(const PageHeader& pageHeader) {
             values[i] = value;
           }
         }
-        auto values = dictionary_.values->asMutable<UnscaledLongDecimal>();
+        auto values = dictionary_.values->asMutable<int128_t>();
         for (auto i = 0; i < dictionary_.numValues; ++i) {
-          values[i] = UnscaledLongDecimal(
-              dwio::common::builtin_bswap128(values[i].unscaledValue()));
+          values[i] = dwio::common::builtin_bswap128(values[i]);
         }
         break;
       }
@@ -552,7 +682,7 @@ void PageReader::prepareDictionary(const PageHeader& pageHeader) {
   }
 }
 
-void PageReader::makeFilterCache(dwio::common::ScanState& state) {
+void QplPageReader::makeFilterCache(dwio::common::ScanState& state) {
   VELOX_CHECK(
       !state.dictionary2.values, "Parquet supports only one dictionary");
   state.filterCache.resize(state.dictionary.numValues);
@@ -578,7 +708,7 @@ int32_t parquetTypeBytes(thrift::Type::type type) {
 }
 } // namespace
 
-void PageReader::preloadRepDefs() {
+void QplPageReader::preloadRepDefs() {
   hasChunkRepDefs_ = true;
   while (pageStart_ < chunkSize_) {
     seekToPage(kRepDefOnly);
@@ -618,7 +748,7 @@ void PageReader::preloadRepDefs() {
   pageData_ = nullptr;
 }
 
-void PageReader::decodeRepDefs(int32_t numTopLevelRows) {
+void QplPageReader::decodeRepDefs(int32_t numTopLevelRows) {
   if (definitionLevels_.empty()) {
     preloadRepDefs();
   }
@@ -641,7 +771,7 @@ void PageReader::decodeRepDefs(int32_t numTopLevelRows) {
   }
 }
 
-int32_t PageReader::getLengthsAndNulls(
+int32_t QplPageReader::getLengthsAndNulls(
     LevelMode mode,
     const ::parquet::internal::LevelInfo& info,
     int32_t begin,
@@ -689,13 +819,15 @@ int32_t PageReader::getLengthsAndNulls(
   return bits.values_read;
 }
 
-void PageReader::makeDecoder() {
+void QplPageReader::makeDecoder(PageHeader pageHeader) {
   auto parquetType = type_->parquetType_.value();
   switch (encoding_) {
     case Encoding::RLE_DICTIONARY:
     case Encoding::PLAIN_DICTIONARY:
       dictionaryIdDecoder_ = std::make_unique<RleBpDataDecoder>(
           pageData_ + 1, pageData_ + encodedDataSize_, pageData_[0]);
+      dictionaryIdQplDecoder_ = std::make_unique<DeflateRleBpDecoder>(
+           pageData_, pageHeader, encodedDataSize_, type_, pool_);
       break;
     case Encoding::PLAIN:
       switch (parquetType) {
@@ -730,7 +862,7 @@ void PageReader::makeDecoder() {
   }
 }
 
-void PageReader::skip(int64_t numRows) {
+void QplPageReader::skip(int64_t numRows) {
   if (!numRows && firstUnvisited_ != rowOfPage_ + numRowsInPage_) {
     // Return if no skip and position not at end of page or before first page.
     return;
@@ -762,7 +894,7 @@ void PageReader::skip(int64_t numRows) {
   }
 }
 
-int32_t PageReader::skipNulls(int32_t numValues) {
+int32_t QplPageReader::skipNulls(int32_t numValues) {
   if (!defineDecoder_ && isTopLevel_) {
     return numValues;
   }
@@ -783,7 +915,7 @@ int32_t PageReader::skipNulls(int32_t numValues) {
   return bits::countBits(words, 0, numValues);
 }
 
-void PageReader::skipNullsOnly(int64_t numRows) {
+void QplPageReader::skipNullsOnly(int64_t numRows) {
   if (!numRows && firstUnvisited_ != rowOfPage_ + numRowsInPage_) {
     // Return if no skip and position not at end of page or before first page.
     return;
@@ -801,7 +933,7 @@ void PageReader::skipNullsOnly(int64_t numRows) {
   skipNulls(toSkip);
 }
 
-void PageReader::readNullsOnly(int64_t numValues, BufferPtr& buffer) {
+void QplPageReader::readNullsOnly(int64_t numValues, BufferPtr& buffer) {
   VELOX_CHECK(!maxRepeat_);
   auto toRead = numValues;
   if (buffer) {
@@ -824,7 +956,7 @@ void PageReader::readNullsOnly(int64_t numValues, BufferPtr& buffer) {
 }
 
 const uint64_t* FOLLY_NULLABLE
-PageReader::readNulls(int32_t numValues, BufferPtr& buffer) {
+QplPageReader::readNulls(int32_t numValues, BufferPtr& buffer) {
   if (maxDefine_ == 0) {
     buffer = nullptr;
     return nullptr;
@@ -847,7 +979,7 @@ PageReader::readNulls(int32_t numValues, BufferPtr& buffer) {
   return buffer->as<uint64_t>();
 }
 
-void PageReader::startVisit(folly::Range<const vector_size_t*> rows) {
+void QplPageReader::startVisit(folly::Range<const vector_size_t*> rows) {
   visitorRows_ = rows.data();
   numVisitorRows_ = rows.size();
   currentVisitorRow_ = 0;
@@ -855,7 +987,7 @@ void PageReader::startVisit(folly::Range<const vector_size_t*> rows) {
   visitBase_ = firstUnvisited_;
 }
 
-bool PageReader::rowsForPage(
+bool QplPageReader::rowsForPage(
     dwio::common::SelectiveColumnReader& reader,
     bool hasFilter,
     bool mayProduceNulls,
@@ -874,32 +1006,32 @@ bool PageReader::rowsForPage(
       numLeafNullsConsumed_ = rowOfPage_;
     }
   }
-  auto& scanState = reader.scanState();
-  if (isDictionary()) {
-    if (scanState.dictionary.values != dictionary_.values) {
-      scanState.dictionary = dictionary_;
-      if (hasFilter) {
-        makeFilterCache(scanState);
-      }
-      scanState.updateRawState();
-    }
-  } else {
-    if (scanState.dictionary.values) {
-      // If there are previous pages in the current read, nulls read
-      // from them are in 'nullConcatenation_' Put this into the
-      // reader for the time of dedictionarizing so we don't read
-      // undefined dictionary indices.
-      if (mayProduceNulls && reader.numValues()) {
-        reader.setNulls(nullConcatenation_.buffer());
-      }
-      reader.dedictionarize();
-      // The nulls across all pages are in nullConcatenation_. Clear
-      // the nulls and let the prepareNulls below reserve nulls for
-      // the new page.
-      reader.setNulls(nullptr);
-      scanState.dictionary.clear();
-    }
-  }
+  // auto& scanState = reader.scanState();
+  // if (isDictionary()) {
+  //   if (scanState.dictionary.values != dictionary_.values) {
+  //     scanState.dictionary = dictionary_;
+  //     if (hasFilter) {
+  //       makeFilterCache(scanState);
+  //     }
+  //     scanState.updateRawState();
+  //   }
+  // } else {
+  //   if (scanState.dictionary.values) {
+  //     // If there are previous pages in the current read, nulls read
+  //     // from them are in 'nullConcatenation_' Put this into the
+  //     // reader for the time of dedictionarizing so we don't read
+  //     // undefined dictionary indices.
+  //     if (mayProduceNulls && reader.numValues()) {
+  //       reader.setNulls(nullConcatenation_.buffer());
+  //     }
+  //     reader.dedictionarize();
+  //     // The nulls across all pages are in nullConcatenation_. Clear
+  //     // the nulls and let the prepareNulls below reserve nulls for
+  //     // the new page.
+  //     reader.setNulls(nullptr);
+  //     scanState.dictionary.clear();
+  //   }
+  // }
 
   // Then check how many of the rows to visit are on the same page as the
   // current one.
@@ -955,7 +1087,7 @@ bool PageReader::rowsForPage(
   return true;
 }
 
-const VectorPtr& PageReader::dictionaryValues(const TypePtr& type) {
+const VectorPtr& QplPageReader::dictionaryValues(const TypePtr& type) {
   if (!dictionaryValues_) {
     dictionaryValues_ = std::make_shared<FlatVector<StringView>>(
         &pool_,
@@ -969,3 +1101,4 @@ const VectorPtr& PageReader::dictionaryValues(const TypePtr& type) {
 }
 
 } // namespace facebook::velox::parquet
+#endif

@@ -149,6 +149,8 @@ size_t getRowCount(Table table, double scaleFactor) {
       return 25;
     case Table::TBL_REGION:
       return 5;
+    case Table::TBL_LINEORDER_FLAT:
+      return getLineItemRowCount(scaleFactor);      
     case Table::TBL_LINEITEM:
       return getLineItemRowCount(scaleFactor);
   }
@@ -276,8 +278,93 @@ RowTypePtr getTableSchema(Table table) {
               VARCHAR(),
           });
       return type;
-    }
-
+    } 
+    case Table::TBL_LINEORDER_FLAT: {
+      static RowTypePtr type = ROW(
+          {
+            "lo_orderkey",
+            "lo_linenumbery",
+            "lo_custkey",
+            "lo_partkey",
+            "lo_suppkey",
+            "lo_orderdate",
+            "lo_orderpriority",
+            "lo_shippriority",
+            "lo_quantity",
+            "lo_extendedprice",
+            "lo_ordtotalprice",
+            "lo_discount",
+            "lo_revenue",
+            "lo_supplycost",
+            "lo_tax",
+            "lo_commitdate",
+            "lo_shipmode",
+            "c_name",
+            "c_address",
+            "c_city",
+            "c_nation",
+            "c_region",
+            "c_phone",
+            "c_mktsegment",
+            "s_name",
+            "s_address",
+            "s_city",
+            "s_nation",
+            "s_region",
+            "s_phone",
+            "p_name",
+            "p_mfgr",
+            "p_category",
+            "p_brand",
+            "p_color",
+            "p_type",
+            "p_size",
+            "p_container",
+            "lo_orderyear",
+          },
+          {
+              INTEGER(),
+              INTEGER(),
+              INTEGER(),
+              INTEGER(),
+              INTEGER(),
+              DATE(),
+              VARCHAR(),
+              INTEGER(),
+              INTEGER(),
+              INTEGER(),
+              INTEGER(),
+              INTEGER(),
+              INTEGER(),
+              INTEGER(),
+              INTEGER(),
+              DATE(),
+              VARCHAR(),
+              VARCHAR(),
+              VARCHAR(),
+              INTEGER(),
+              INTEGER(),
+              INTEGER(),
+              VARCHAR(),
+              VARCHAR(),
+              VARCHAR(),
+              VARCHAR(),
+              INTEGER(),
+              INTEGER(),
+              INTEGER(),
+              VARCHAR(),
+              VARCHAR(),
+              VARCHAR(),
+              INTEGER(),
+              VARCHAR(),
+              INTEGER(),
+              VARCHAR(),
+              INTEGER(),
+              VARCHAR(),
+              INTEGER(),
+          });
+      return type;
+    }     
     case Table::TBL_LINEITEM: {
       static RowTypePtr type = ROW(
           {

@@ -14,6 +14,10 @@
 
 add_executable(velox_file_test FileTest.cpp)
 add_test(velox_file_test velox_file_test)
+set(QPL_STATIC_LINK_LIBS ${QPL_STATIC_LINK_LIBS})
+if(VELOX_ENABLE_QPL)
+  list(APPEND QPL_STATIC_LINK_LIBS qpl::qpl)
+endif()
 target_link_libraries(
   velox_file_test
   velox_file
@@ -21,5 +25,6 @@ target_link_libraries(
   velox_exec_test_lib
   ${FMT}
   ${FOLLY_WITH_DEPENDENCIES}
+  ${QPL_STATIC_LINK_LIBS}
   gtest
   gtest_main)

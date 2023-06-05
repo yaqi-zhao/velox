@@ -33,6 +33,28 @@ add_library(
   StripeReaderBase.cpp
   StripeStream.cpp)
 
+set_source_files_properties(
+  BinaryStreamReader.cpp
+  ColumnReader.cpp
+  DwrfData.cpp
+  DwrfReader.cpp
+  FlatMapColumnReader.cpp
+  ReaderBase.cpp
+  SelectiveDwrfReader.cpp
+  SelectiveByteRleColumnReader.cpp
+  SelectiveFlatMapColumnReader.cpp
+  SelectiveIntegerDirectColumnReader.cpp
+  SelectiveIntegerDictionaryColumnReader.cpp
+  SelectiveStringDirectColumnReader.cpp
+  SelectiveStringDictionaryColumnReader.cpp
+  SelectiveTimestampColumnReader.cpp
+  SelectiveStructColumnReader.cpp
+  SelectiveRepeatedColumnReader.cpp
+  StripeDictionaryCache.cpp
+  StripeReaderBase.cpp
+  StripeStream.cpp
+    PROPERTIES COMPILE_FLAGS "-mwaitpkg")
+
 target_link_libraries(
   velox_dwio_dwrf_reader velox_dwio_common velox_dwio_dwrf_common velox_caching
   velox_dwio_dwrf_utils ${FMT})
