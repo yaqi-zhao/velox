@@ -26,6 +26,7 @@ add_library(
   QueryAssertions.cpp
   SumNonPODAggregate.cpp
   TpchQueryBuilder.cpp
+  SsbQueryBuilder
   VectorTestUtil.cpp)
 
 target_link_libraries(

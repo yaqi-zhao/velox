@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_library(velox_tpch_benchmark_lib TpchBenchmark.cpp)
+add_library(velox_tpch_benchmark_lib TpchBenchmark.cpp SsbBenchmark.cpp)
 
 target_link_libraries(
   velox_tpch_benchmark_lib
@@ -37,6 +37,9 @@ target_link_libraries(
   ${FOLLY_BENCHMARK}
   fmt::fmt)
 
+
 add_executable(velox_tpch_benchmark TpchBenchmarkMain.cpp)
+add_executable(velox_ssb_benchmark SsbBenchmark.cpp)
 
 target_link_libraries(velox_tpch_benchmark velox_tpch_benchmark_lib)
+target_link_libraries(velox_ssb_benchmark velox_tpch_benchmark_lib)
