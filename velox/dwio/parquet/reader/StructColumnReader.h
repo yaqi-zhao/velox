@@ -36,6 +36,8 @@ class StructColumnReader : public dwio::common::SelectiveStructColumnReader {
   /// Creates the streams for 'rowGroup in 'input'. Does not load yet.
   void enqueueRowGroup(uint32_t index, dwio::common::BufferedInput& input);
 
+  void prefetchRowGroup(uint32_t index);
+
   // No-op in Parquet. All readers switch row groups at the same time, there is
   // no on-demand skipping to a new row group.
   void advanceFieldReader(

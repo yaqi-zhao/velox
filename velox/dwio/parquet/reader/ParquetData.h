@@ -24,6 +24,7 @@
 #include "velox/dwio/parquet/reader/PageReader.h"
 #include "velox/dwio/parquet/thrift/ParquetThriftTypes.h"
 #include "velox/dwio/parquet/thrift/ThriftTransport.h"
+#include "velox/dwio/parquet/reader/QplPageReader.h"
 
 namespace facebook::velox::parquet {
 class ParquetParams : public dwio::common::FormatParams {
@@ -54,6 +55,7 @@ class ParquetData : public dwio::common::FormatData {
 
   /// Prepares to read data for 'index'th row group.
   void enqueueRowGroup(uint32_t index, dwio::common::BufferedInput& input);
+  void prefetchRowGroup(uint32_t index);
 
   /// Positions 'this' at 'index'th row group. enqueueRowGroup must be called
   /// first. The returned PositionProvider is empty and should not be used.
@@ -73,7 +75,11 @@ class ParquetData : public dwio::common::FormatData {
   // Reads null flags for 'numValues' next top level rows. The first 'numValues'
   // bits of 'nulls' are set and the reader is advanced by numValues'.
   void readNullsOnly(int32_t numValues, BufferPtr& nulls) {
-    reader_->readNullsOnly(numValues, nulls);
+    if (qplReader_ != nullptr) {
+      qplReader_->readNullsOnly(numValues, nulls);
+    } else {
+      reader_->readNullsOnly(numValues, nulls);
+    }
   }
 
   bool hasNulls() const override {
@@ -135,7 +141,11 @@ class ParquetData : public dwio::common::FormatData {
     // 'nullsOnly' set and is responsible for reading however many nulls or
     // pages it takes to skip 'numValues' top level rows.
     if (nullsOnly) {
-      reader_->skipNullsOnly(numValues);
+      if (qplReader_ != nullptr) {
+        qplReader_->skipNullsOnly(numValues);
+      } else {
+        reader_->skipNullsOnly(numValues);
+      }
     }
     if (presetNulls_) {
       VELOX_DCHECK_LE(numValues, presetNullsSize_ - presetNullsConsumed_);
@@ -145,7 +155,11 @@ class ParquetData : public dwio::common::FormatData {
   }
 
   uint64_t skip(uint64_t numRows) override {
-    reader_->skip(numRows);
+    if (qplReader_ != nullptr) {
+      qplReader_->skip(numRows);
+    } else {
+      reader_->skip(numRows);
+    }
     return numRows;
   }
 
@@ -153,19 +167,35 @@ class ParquetData : public dwio::common::FormatData {
   /// PageReader::readWithVisitor().
   template <typename Visitor>
   void readWithVisitor(Visitor visitor) {
-    reader_->readWithVisitor(visitor);
+    if (qplReader_ != nullptr) {
+      qplReader_->readWithVisitor(visitor);
+    } else {
+      reader_->readWithVisitor(visitor);
+    }
   }
 
   const VectorPtr& dictionaryValues(const TypePtr& type) {
-    return reader_->dictionaryValues(type);
+    if (qplReader_ != nullptr) {
+      return qplReader_->dictionaryValues(type);
+    } else {
+      return reader_->dictionaryValues(type);
+    }
   }
 
   void clearDictionary() {
-    reader_->clearDictionary();
+    if (qplReader_ != nullptr) {
+      qplReader_->clearDictionary();
+    } else {
+      reader_->clearDictionary();
+    }
   }
 
   bool hasDictionary() const {
-    return reader_->isDictionary();
+    if (qplReader_ != nullptr) {
+      qplReader_->isDictionary();
+    } else {
+      return reader_->isDictionary();
+    }
   }
 
   bool parentNullsInLeaves() const override {
@@ -184,11 +214,14 @@ class ParquetData : public dwio::common::FormatData {
   // Streams for this column in each of 'rowGroups_'. Will be created on or
   // ahead of first use, not at construction.
   std::vector<std::unique_ptr<dwio::common::SeekableInputStream>> streams_;
+  std::vector<std::unique_ptr<QplPageReader>> pageReaders_;
 
   const uint32_t maxDefine_;
   const uint32_t maxRepeat_;
   int64_t rowsInRowGroup_;
   std::unique_ptr<PageReader> reader_;
+  std::unique_ptr<QplPageReader> qplReader_ = nullptr;
+  
 
   // Nulls derived from leaf repdefs for non-leaf readers.
   BufferPtr presetNulls_;
