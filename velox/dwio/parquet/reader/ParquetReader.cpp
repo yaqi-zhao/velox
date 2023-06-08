@@ -23,7 +23,7 @@
 
 DEFINE_int32(
     parquet_prefetch_rowgroups,
-    1,
+    2,
     "Number of next row groups to "
     "prefetch. 1 means prefetch the next row group before decoding "
     "the current one");
@@ -463,6 +463,7 @@ void ReaderBase::scheduleRowGroups(
     reader.enqueueRowGroup(thisGroup, *newInput);
     newInput->load(dwio::common::LogType::STRIPE);
     inputs_[thisGroup] = std::move(newInput);
+    reader.prefetchRowGroup(thisGroup);
   }
   for (auto counter = 0; counter < FLAGS_parquet_prefetch_rowgroups;
        ++counter) {
@@ -472,6 +473,7 @@ void ReaderBase::scheduleRowGroups(
         reader.enqueueRowGroup(nextGroup, *newInput);
         newInput->load(dwio::common::LogType::STRIPE);
         inputs_[nextGroup] = std::move(newInput);
+        reader.prefetchRowGroup(nextGroup);
       }
     } else {
       break;
