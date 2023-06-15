@@ -27,6 +27,7 @@
 #include "velox/dwio/parquet/thrift/ParquetThriftTypes.h"
 #include "velox/vector/BaseVector.h"
 
+#ifdef VELOX_ENABLE_QPL  
 namespace facebook::velox::parquet {
 
 /// Manages access to pages inside a ColumnChunk. Interprets page headers and
@@ -52,6 +53,7 @@ class QplPageReader {
     type_->makeLevelInfo(leafInfo_);
     dict_qpl_job_id = 0;
     data_qpl_job_id = 0;
+    cur_visitor_pos  = 0;
   }
 
   // This PageReader constructor is for unit test only.
@@ -70,6 +72,7 @@ class QplPageReader {
         nullConcatenation_(pool_) {
         dict_qpl_job_id = 0;
         data_qpl_job_id = 0;
+        cur_visitor_pos = 0;
         }
 
 
@@ -145,6 +148,8 @@ class QplPageReader {
   // Indicates that we only want the repdefs for the next page. Used when
   // prereading repdefs with seekToPage.
   static constexpr int64_t kRepDefOnly = -1;
+
+  uint32_t cur_visitor_pos;
 
   // In 'numRowsInPage_', indicates that the page's def levels must be
   // consulted to determine number of leaf values.
@@ -224,6 +229,12 @@ class QplPageReader {
       const char* FOLLY_NONNULL pageData,
       uint32_t compressedSize,
       uint32_t uncompressedSize);
+  const char* FOLLY_NONNULL uncompressDatatoPtr(
+      const char* FOLLY_NONNULL pageData,
+      uint32_t compressedSize,
+      uint32_t uncompressedSize,
+      BufferPtr& uncompressedData);
+
 
   const char* FOLLY_NONNULL uncompressQplData(
       const char* FOLLY_NONNULL pageData,
@@ -237,6 +248,87 @@ class QplPageReader {
     T data = *reinterpret_cast<const T*>(ptr);
     ptr += sizeof(T);
     return data;
+  }
+
+  template <bool hasNulls, typename Visitor>
+  void filterWithVisitor(const uint64_t* FOLLY_NULLABLE nulls, Visitor visitor) {
+    constexpr bool hasFilter =
+        !std::is_same_v<typename Visitor::FilterType, common::AlwaysTrue>;
+    constexpr bool hasHook =
+        !std::is_same_v<typename Visitor::HookType, dwio::common::NoHook>;
+
+    auto numRows = visitor.numRows();
+    auto numAllRows = visitor.numRows();
+    auto values = visitor.rawValues(numRows);
+    using TValues = typename std::remove_reference<decltype(values[0])>::type;
+    using TIndex = typename std::make_signed_t<typename dwio::common::make_index<TValues>::type>;
+    //  filter dictionary to get output
+    int32_t numValues = 0;
+    auto filterHits = hasFilter ? visitor.outputRows(numRows) : nullptr;
+    TValues* input;
+    if (decoded_values_ != NULL) {
+      input = decoded_values_->asMutable<TValues>() + cur_visitor_pos;
+      cur_visitor_pos += numAllRows;
+      memcpy((void*)values, input, numAllRows * sizeof(TValues));
+    }
+
+    uint32_t check_time = 0;
+    while (check_time < 100) {
+      try {
+          visitor.template processRun<hasFilter, hasHook, false>(
+              values,
+              numRows,
+              nullptr,
+              filterHits,
+              values,
+              numValues);
+          if (visitor.atEnd()) {
+            visitor.setNumValues(hasFilter ? numValues : numAllRows);
+            return;
+          }  
+          return;     
+      } catch (const std::runtime_error& e) {
+        check_time++;
+        // We cannot throw an exception from the destructor. Warn instead.
+          if (decoded_values_ != NULL) {
+            input = decoded_values_->asMutable<TValues>() + cur_visitor_pos - numAllRows;
+            cur_visitor_pos += numAllRows;
+            memcpy((void*)values, input, numAllRows * sizeof(TValues));
+          }
+          std::cout << "check time: " << check_time << folly::to<std::string>(e.what()) << std::endl;
+      }
+    }
+
+    return;
+  }
+
+  template <
+      typename Visitor,
+      typename std::enable_if<
+              std::is_same_v<typename Visitor::DataType, int32_t>,
+          int>::type = 0>
+  void callFilter(
+      const uint64_t* FOLLY_NULLABLE nulls,
+      bool& nullsFromFastPath,
+      Visitor visitor) {
+      if (isDictionary()) {
+        auto dictVisitor = visitor.toDictionaryColumnVisitor();
+        this->filterWithVisitor<false>(nullptr, dictVisitor);
+      } else {
+        std::cout << "error path" << std::endl;
+      }
+  }
+
+  template <
+      typename Visitor,
+      typename std::enable_if<
+              !std::is_same_v<typename Visitor::DataType, int32_t>,
+          int>::type = 0>
+  void callFilter(
+      const uint64_t* FOLLY_NULLABLE nulls,
+      bool& nullsFromFastPath,
+      Visitor visitor) {
+      return;
   }
 
   // Starts iterating over 'rows', which may span multiple pages. 'rows' are
@@ -361,6 +453,8 @@ class QplPageReader {
       return reader.numValues();
     }
   }
+
+  uint32_t relDecode(const char* FOLLY_NULLABLE pageData, const thrift::PageHeader& pageHeader);
   
 
   memory::MemoryPool& pool_;
@@ -442,6 +536,8 @@ class QplPageReader {
   // First byte of uncompressed encoded data. Contains the encoded data as a
   // contiguous run of bytes.
   const char* FOLLY_NULLABLE pageData_{nullptr};
+
+  BufferPtr decoded_values_;
 
   // Dictionary contents.
   dwio::common::DictionaryValues dictionary_;
@@ -537,7 +633,12 @@ void QplPageReader::readWithVisitor(Visitor& visitor) {
     int32_t numValuesBeforePage = numRowsInReader<hasFilter>(reader);
     visitor.setNumValuesBias(numValuesBeforePage);
     visitor.setRows(pageRows);
-    callDecoder(nulls, nullsFromFastPath, visitor);
+    if (data_qpl_job_id > 0) {
+      waitQplJob(data_qpl_job_id);
+      data_qpl_job_id = 0;
+    } 
+      // callDecoder(nulls, nullsFromFastPath, visitor);
+    callFilter(nulls, nullsFromFastPath, visitor);
     if (currentVisitorRow_ < numVisitorRows_ || isMultiPage) {
       if (mayProduceNulls) {
         if (!isMultiPage) {
@@ -584,3 +685,4 @@ void QplPageReader::readWithVisitor(Visitor& visitor) {
 }
 
 } // namespace facebook::velox::parquet
+#endif

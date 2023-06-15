@@ -85,11 +85,14 @@ bool ParquetData::rowGroupMatches(
 void ParquetData::prefetchRowGroup(uint32_t index) {
   auto& chunk = rowGroups_[index].columns[type_->column];
   auto& metaData = chunk.meta_data;
-  if (metaData.codec == thrift::CompressionCodec::QPL) {
+#ifdef VELOX_ENABLE_QPL    
+  // if (metaData.codec == thrift::CompressionCodec::QPL) {
+  if (!hasNulls() && maxRepeat_ == 0 && metaData.type == thrift::Type::INT32) {
     if (pageReaders_[index] != nullptr) {
       pageReaders_[index]->preDecompressPage();
     }
   }
+#endif
 }
 
 void ParquetData::enqueueRowGroup(
@@ -117,7 +120,9 @@ void ParquetData::enqueueRowGroup(
 
   auto id = dwio::common::StreamIdentifier(type_->column);
   streams_[index] = input.enqueue({chunkReadOffset, readSize}, &id);
-  if (metaData.codec == thrift::CompressionCodec::QPL) {
+  // if (metaData.codec == thrift::CompressionCodec::QPL) {
+#ifdef VELOX_ENABLE_QPL      
+  if (!hasNulls() && maxRepeat_ == 0  && metaData.type == thrift::Type::INT32) {    
     pageReaders_.resize(rowGroups_.size());
     pageReaders_[index] = std::make_unique<QplPageReader>(
       std::move(streams_[index]),
@@ -126,6 +131,7 @@ void ParquetData::enqueueRowGroup(
       metaData.codec,
       metaData.total_compressed_size);
   }
+#endif  
 }
 
 dwio::common::PositionProvider ParquetData::seekToRowGroup(uint32_t index) {
@@ -133,7 +139,9 @@ dwio::common::PositionProvider ParquetData::seekToRowGroup(uint32_t index) {
   VELOX_CHECK_LT(index, streams_.size());
   // VELOX_CHECK(streams_[index], "Stream not enqueued for column");
   auto& metadata = rowGroups_[index].columns[type_->column].meta_data;
-  if (metadata.codec == thrift::CompressionCodec::QPL) {
+  // if (metadata.codec == thrift::CompressionCodec::QPL) {
+#ifdef VELOX_ENABLE_QPL      
+  if (!hasNulls() && maxRepeat_ == 0  && metadata.type == thrift::Type::INT32) {    
     if (pageReaders_[index] == nullptr) {
       pageReaders_.resize(rowGroups_.size());
       pageReaders_[index] = std::make_unique<QplPageReader>(
@@ -145,7 +153,9 @@ dwio::common::PositionProvider ParquetData::seekToRowGroup(uint32_t index) {
     }
     qplReader_ = std::move(pageReaders_[index]);
     // qplReader_->preDecompressPage();
-  } else {
+  } else 
+#endif
+  {
     reader_ = std::make_unique<PageReader>(
         std::move(streams_[index]),
         pool_,

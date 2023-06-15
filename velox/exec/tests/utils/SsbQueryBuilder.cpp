@@ -191,7 +191,7 @@ SsbPlan SsbQueryBuilder::getQ31Plan() const {
 
 SsbPlan SsbQueryBuilder::getQ30Plan() const {
   std::vector<std::string> selectedColumns = {
-      "lo_orderdate"};
+      "c_nation"};
       // "lo_orderkey",
       // "lo_discount"};
 
@@ -199,7 +199,7 @@ SsbPlan SsbQueryBuilder::getQ30Plan() const {
   const auto& fileColumnNames = getFileColumnNames(kLineorderFlat);
   
 
-  auto orderDateFilter = formatDateFilter("lo_orderdate", selectedRowType, "'1993-10-01'", "'1993-12-31'");
+  // auto orderDateFilter = formatDateFilter("lo_orderdate", selectedRowType, "'1993-10-01'", "'1993-12-31'");
 
   core::PlanNodeId lineitemPlanNodeId;
   auto plan = PlanBuilder()
@@ -207,11 +207,11 @@ SsbPlan SsbQueryBuilder::getQ30Plan() const {
                       kLineorderFlat,
                       selectedRowType,
                       fileColumnNames,
-                      {"lo_orderdate > '1993-01-01'::DATE"})
+                      {})
                   .capturePlanNodeId(lineitemPlanNodeId)
-                  .project({"lo_orderdate"})
+                  .project({"c_nation"})
                   // .filter("(lo_orderkey> 300)")
-                  .partialAggregation({}, {"count(lo_orderdate)"})
+                  .partialAggregation({}, {"count(c_nation)"})
                   .finalAggregation()
                   .localPartition({})
                   .planNode();

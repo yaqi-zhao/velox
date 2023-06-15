@@ -28,6 +28,7 @@
 #include <zstd.h>
 #include "compression_qpl.h"
 
+#ifdef VELOX_ENABLE_QPL  
 namespace facebook::velox::parquet {
 
 using thrift::Encoding;
@@ -68,14 +69,13 @@ void QplPageReader::seekToPage(int64_t row) {
   // 'rowOfPage_' is the row number of the first row of the next page.
   rowOfPage_ += numRowsInPage_;
   if (dict_qpl_job_id > 0) {
-    waitQplJob(dict_qpl_job_id);
     prepareDict(dictPageHeader_);
     dict_qpl_job_id = 0;
   }
   if (data_qpl_job_id > 0) {
-    waitQplJob(data_qpl_job_id);
+    // waitQplJob(data_qpl_job_id);
     prepareData(dataPageHeader_, row);
-    data_qpl_job_id = 0;
+    // data_qpl_job_id = 0;
     return;
   }
 
@@ -185,6 +185,84 @@ const char* FOLLY_NONNULL QplPageReader::uncompressQplData(
         (uint8_t *)uncompressedData->asMutable<char>());
     return nullptr;
 }
+
+const char* FOLLY_NONNULL QplPageReader::uncompressDatatoPtr(
+    const char* pageData,
+    uint32_t compressedSize,
+    uint32_t uncompressedSize,
+    BufferPtr& uncompressedData) {
+  switch (codec_) {
+    case thrift::CompressionCodec::UNCOMPRESSED:
+      return pageData;
+    case thrift::CompressionCodec::SNAPPY: {
+      dwio::common::ensureCapacity<char>(
+          uncompressedData, uncompressedSize, &pool_);
+
+      size_t sizeFromSnappy;
+      if (!snappy::GetUncompressedLength(
+              pageData, compressedSize, &sizeFromSnappy)) {
+        VELOX_FAIL("Snappy uncompressed size not available");
+      }
+      VELOX_CHECK_EQ(uncompressedSize, sizeFromSnappy);
+      snappy::RawUncompress(
+          pageData, compressedSize, uncompressedData->asMutable<char>());
+      return uncompressedData->as<char>();
+    }
+    case thrift::CompressionCodec::ZSTD: {
+      dwio::common::ensureCapacity<char>(
+          uncompressedData, uncompressedSize, &pool_);
+
+      auto ret = ZSTD_decompress(
+          uncompressedData->asMutable<char>(),
+          uncompressedSize,
+          pageData,
+          compressedSize);
+      VELOX_CHECK(
+          !ZSTD_isError(ret),
+          "ZSTD returned an error: ",
+          ZSTD_getErrorName(ret));
+      return uncompressedData->as<char>();
+    }
+    case thrift::CompressionCodec::GZIP: {
+      dwio::common::ensureCapacity<char>(
+          uncompressedData, uncompressedSize, &pool_);
+      z_stream stream;
+      memset(&stream, 0, sizeof(stream));
+      constexpr int WINDOW_BITS = 15;
+      // Determine if this is libz or gzip from header.
+      constexpr int DETECT_CODEC = 32;
+      // Initialize decompressor.
+      auto ret = inflateInit2(&stream, WINDOW_BITS | DETECT_CODEC);
+      VELOX_CHECK(
+          (ret == Z_OK),
+          "zlib inflateInit failed: {}",
+          stream.msg ? stream.msg : "");
+      auto inflateEndGuard = folly::makeGuard([&] {
+        if (inflateEnd(&stream) != Z_OK) {
+          LOG(WARNING) << "inflateEnd: " << (stream.msg ? stream.msg : "");
+        }
+      });
+      // Decompress.
+      stream.next_in =
+          const_cast<Bytef*>(reinterpret_cast<const Bytef*>(pageData));
+      stream.avail_in = static_cast<uInt>(compressedSize);
+      stream.next_out =
+          reinterpret_cast<Bytef*>(uncompressedData->asMutable<char>());
+      stream.avail_out = static_cast<uInt>(uncompressedSize);
+      ret = inflate(&stream, Z_FINISH);
+      VELOX_CHECK(
+          ret == Z_STREAM_END,
+          "GZipCodec failed: {}",
+          stream.msg ? stream.msg : "");
+      return uncompressedData->as<char>();
+    }
+     
+    default:
+      VELOX_FAIL("Unsupported Parquet compression type '{}'", codec_);
+  }
+
+}
+
 const char* FOLLY_NONNULL QplPageReader::uncompressData(
     const char* pageData,
     uint32_t compressedSize,
@@ -302,19 +380,67 @@ void QplPageReader::updateRowInfoAfterPageSkipped() {
   }
 }
 
+uint32_t QplPageReader::relDecode(const char* FOLLY_NULLABLE pageData, const thrift::PageHeader& pageHeader) {
+    dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
+    uint32_t job_id = 0;
+
+    qpl_job* job = qpl_job_pool.AcquireJob(job_id);
+    VELOX_DCHECK(job != nullptr, "Acquire qpl job failed");
+
+    dwio::common::ensureCapacity<uint32_t>(decoded_values_, pageHeader.data_page_header.num_values, &pool_);
+    decoded_values_->setSize(pageHeader.data_page_header.num_values * sizeof(uint32_t));
+    uint8_t* out_ptr = decoded_values_->asMutable<uint8_t>();
+    
+    job->op = qpl_op_extract;
+    job->next_in_ptr = reinterpret_cast<uint8_t*>(const_cast<char*>(pageData));
+    job->available_in = pageHeader.uncompressed_page_size;
+    job->parser = qpl_p_parquet_rle;
+    job->param_low = 0;
+    job->param_high = pageHeader.data_page_header.num_values;
+    job->src1_bit_width = pageData[0];
+    job->out_bit_width = qpl_ow_32;
+    job->next_out_ptr = out_ptr;
+    job->available_out = static_cast<uint32_t>(pageHeader.data_page_header.num_values * sizeof(uint32_t));
+    job->num_input_elements = pageHeader.data_page_header.num_values;
+    job->numa_id = 1;
+
+    auto status = qpl_submit_job(job);
+    uint32_t check_time = 0;
+    while (status == QPL_STS_QUEUES_ARE_BUSY_ERR && check_time < UINT32_MAX - 1) {
+      _umwait(1, __rdtsc() + 7000);
+      check_time++;
+      status = qpl_submit_job(job);
+      // std::cout << "submit deflate+prle decode job error : check_time " << check_time << ", status: " << (int)status << std::endl;
+    }
+    VELOX_DCHECK(status == QPL_STS_OK, "Execturion of QPL Job failed, status {}, job_id {}", status, (int)job_id);
+    if (status != QPL_STS_OK) {
+    throw std::runtime_error(
+        "submition of QPL Job failed, status:" + std::to_string(status) + " job_id: " + std::to_string(job_id));
+    }
+
+    return job_id;    
+}
+
 void QplPageReader::prefetchDataPageV1(const thrift::PageHeader& pageHeader) {
+    
   dataPageHeader_ = pageHeader;
   VELOX_CHECK(
       pageHeader.type == thrift::PageType::DATA_PAGE &&
       pageHeader.__isset.data_page_header);
 
   dataPageData_ = readBytes(pageHeader.compressed_page_size, pageBuffer_);   
-  dataPageData_ = uncompressQplData(
-        dataPageData_,
-        pageHeader.compressed_page_size,
-        pageHeader.uncompressed_page_size,
-        uncompressedDataV1Data_,
-        data_qpl_job_id);
+  if (maxRepeat_ == 0 && maxDefine_ == 0 && (pageHeader.data_page_header.encoding == Encoding::RLE_DICTIONARY || pageHeader.data_page_header.encoding == Encoding::PLAIN_DICTIONARY)) {
+    dataPageData_ = uncompressDatatoPtr(
+          dataPageData_,
+          pageHeader.compressed_page_size,
+          pageHeader.uncompressed_page_size,
+          uncompressedDataV1Data_);
+    auto pageEnd = dataPageData_ + pageHeader.uncompressed_page_size;
+    encodedDataSize_ = pageEnd - dataPageData_;
+    encoding_ = pageHeader.data_page_header.encoding;
+    data_qpl_job_id = relDecode(dataPageData_, dataPageHeader_);
+    pageData_ = dataPageData_;
+  }
   return;
 
 }
@@ -333,16 +459,22 @@ void QplPageReader::prefetchDictionary(const thrift::PageHeader& pageHeader) {
       dictionaryEncoding_ == Encoding::PLAIN_DICTIONARY ||
       dictionaryEncoding_ == Encoding::PLAIN);  
   dictPageData_ = readBytes(pageHeader.compressed_page_size, pageBuffer_);
-  dictPageData_ = uncompressQplData(
-        dictPageData_,
-        pageHeader.compressed_page_size,
-        pageHeader.uncompressed_page_size,
-        uncompressedDictData_,
-        dict_qpl_job_id);
+  dict_qpl_job_id = 1;
+  // dictPageData_ = uncompressQplData(
+  //       dictPageData_,
+  //       pageHeader.compressed_page_size,
+  //       pageHeader.uncompressed_page_size,
+  //       uncompressedDictData_,
+  //       dict_qpl_job_id);
   return;
 }
 
 void QplPageReader::prepareDict(const thrift::PageHeader& pageHeader) {
+  dictPageData_ = uncompressDatatoPtr(
+        dictPageData_,
+        dictPageHeader_.compressed_page_size,
+        dictPageHeader_.uncompressed_page_size,
+        uncompressedDictData_);  
   dictPageData_ = uncompressedDictData_->as<char>();
 
   auto parquetType = type_->parquetType_.value();
@@ -487,7 +619,7 @@ void QplPageReader::prepareData(const thrift::PageHeader& pageHeader, int64_t ro
   numRepDefsInPage_ = pageHeader.data_page_header.num_values;
   setPageRowInfo(row == kRepDefOnly);
 
-  dataPageData_ = uncompressedDataV1Data_->as<char>();
+  // dataPageData_ = uncompressedDataV1Data_->as<char>();
 
   auto pageEnd = dataPageData_ + pageHeader.uncompressed_page_size;
   if (maxRepeat_ > 0) {
@@ -1260,3 +1392,5 @@ QplPageReader::~QplPageReader() {
 }
 
 } // namespace facebook::velox::parquet
+
+#endif

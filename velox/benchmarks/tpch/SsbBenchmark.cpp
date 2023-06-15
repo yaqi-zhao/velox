@@ -283,7 +283,7 @@ int main(int argc, char** argv) {
       "This program benchmarks TPC-H queries. Run 'velox_ssb_benchmark -helpon=SsbBenchmark' for available options.\n");
   gflags::SetUsageMessage(kUsage);
   folly::init(&argc, &argv, false);
-  // sleep(10);
+  sleep(10);
   benchmark.initialize();
   queryBuilder =
       std::make_shared<SsbQueryBuilder>(toFileFormat(FLAGS_data_format));
