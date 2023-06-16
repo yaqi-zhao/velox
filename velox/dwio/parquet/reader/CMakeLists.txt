@@ -15,7 +15,6 @@
 add_library(
   velox_dwio_native_parquet_reader
   NestedStructureDecoder.cpp
-  compression_qpl.cpp
   ParquetReader.cpp
   ParquetTypeWithId.cpp
   PageReader.cpp
@@ -29,7 +28,6 @@ add_library(
   StringColumnReader.cpp)
 
 set_source_files_properties(
-  compression_qpl.cpp
   NestedStructureDecoder.cpp
   ParquetReader.cpp
   ParquetTypeWithId.cpp

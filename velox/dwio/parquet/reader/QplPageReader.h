@@ -26,7 +26,9 @@
 #include "velox/dwio/parquet/reader/StringDecoder.h"
 #include "velox/dwio/parquet/thrift/ParquetThriftTypes.h"
 #include "velox/vector/BaseVector.h"
+#include "velox/dwio/parquet/reader/DeflateRleBpDecoder.h"
 
+#ifdef VELOX_ENABLE_QPL
 namespace facebook::velox::parquet {
 
 /// Manages access to pages inside a ColumnChunk. Interprets page headers and
@@ -52,6 +54,7 @@ class QplPageReader {
     type_->makeLevelInfo(leafInfo_);
     dict_qpl_job_id = 0;
     data_qpl_job_id = 0;
+    deflateDecoder_ = nullptr;
   }
 
   // This PageReader constructor is for unit test only.
@@ -156,7 +159,8 @@ class QplPageReader {
 
   void prepareDict(const thrift::PageHeader& pageHeader);
   void prepareData(const thrift::PageHeader& pageHeader, int64_t row);
-
+  void prepareDecodeData(const thrift::PageHeader& pageHeader, int64_t row);
+  
   // Skips the define decoder, if any, for 'numValues' top level
   // rows. Returns the number of non-nulls skipped. The range is the
   // current page.
@@ -294,8 +298,13 @@ class QplPageReader {
       }
     } else {
       if (isDictionary()) {
-        auto dictVisitor = visitor.toDictionaryColumnVisitor();
-        dictionaryIdDecoder_->readWithVisitor<false>(nullptr, dictVisitor);
+        if (deflateDecoder_ != nullptr) {
+          auto dictVisitor = visitor.toDictionaryColumnVisitor();
+          deflateDecoder_->filterWithVisitor<false>(nullptr, dictVisitor);
+        } else { 
+          auto dictVisitor = visitor.toDictionaryColumnVisitor();
+          dictionaryIdDecoder_->readWithVisitor<false>(nullptr, dictVisitor);
+        }
       } else {
         directDecoder_->readWithVisitor<false>(
             nulls, visitor, !this->type_->type->isShortDecimal());
@@ -436,8 +445,7 @@ class QplPageReader {
 
   // Uncompressed data for the page. Rep-def-data in V1, data alone in V2.
   BufferPtr uncompressedData_;
-  BufferPtr uncompressedDictData_;
-  BufferPtr uncompressedDataV1Data_;
+
 
   // First byte of uncompressed encoded data. Contains the encoded data as a
   // contiguous run of bytes.
@@ -514,7 +522,12 @@ class QplPageReader {
   const char* FOLLY_NULLABLE dataPageData_{nullptr};
 
   uint32_t dict_qpl_job_id;
-  uint32_t data_qpl_job_id;  
+  uint32_t data_qpl_job_id;
+  uint32_t decode_qpl_job_id;
+
+  BufferPtr uncompressedDictData_;
+  BufferPtr uncompressedDataV1Data_;
+  std::unique_ptr<DeflateRleBpDecoder> deflateDecoder_;
 };
 
 template <typename Visitor>
@@ -538,6 +551,7 @@ void QplPageReader::readWithVisitor(Visitor& visitor) {
     visitor.setNumValuesBias(numValuesBeforePage);
     visitor.setRows(pageRows);
     callDecoder(nulls, nullsFromFastPath, visitor);
+    // std::cout << "currentVisitorRow_: " << currentVisitorRow_ << ", numVisitorRows_: " << numVisitorRows_ << std::endl;
     if (currentVisitorRow_ < numVisitorRows_ || isMultiPage) {
       if (mayProduceNulls) {
         if (!isMultiPage) {
@@ -584,3 +598,4 @@ void QplPageReader::readWithVisitor(Visitor& visitor) {
 }
 
 } // namespace facebook::velox::parquet
+#endif

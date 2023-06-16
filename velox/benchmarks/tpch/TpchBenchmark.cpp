@@ -250,7 +250,7 @@ class TpchBenchmark {
   std::pair<std::unique_ptr<TaskCursor>, std::vector<RowVectorPtr>> run(
       const TpchPlan& tpchPlan) {
     int32_t repeat = 0;
-    try {
+    // try {
       for (;;) {
         CursorParameters params;
         params.maxDrivers = FLAGS_num_drivers;
@@ -280,10 +280,10 @@ class TpchBenchmark {
           return result;
         }
       }
-    } catch (const std::exception& e) {
-      LOG(ERROR) << "Query terminated with: " << e.what();
-      return {nullptr, std::vector<RowVectorPtr>()};
-    }
+    // } catch (const std::exception& e) {
+    //   LOG(ERROR) << "Query terminated with: " << e.what();
+    //   return {nullptr, std::vector<RowVectorPtr>()};
+    // }
   }
 
   void runMain(std::ostream& out, RunStats& runStats) {

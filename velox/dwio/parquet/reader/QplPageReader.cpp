@@ -26,8 +26,9 @@
 #include <thrift/protocol/TCompactProtocol.h> //@manual
 #include <zlib.h>
 #include <zstd.h>
-#include "compression_qpl.h"
+#include "velox/dwio/parquet/reader/DeflateRleBpDecoder.h"
 
+#ifdef VELOX_ENABLE_QPL
 namespace facebook::velox::parquet {
 
 using thrift::Encoding;
@@ -78,6 +79,12 @@ void QplPageReader::seekToPage(int64_t row) {
     data_qpl_job_id = 0;
     return;
   }
+  if (decode_qpl_job_id > 0) {
+    waitQplJob(decode_qpl_job_id);
+    prepareDecodeData(dataPageHeader_, row);
+    decode_qpl_job_id = 0;
+    return;
+  }  
 
   for (;;) {
     auto dataStart = pageStart_;
@@ -173,12 +180,12 @@ const char* FOLLY_NONNULL QplPageReader::uncompressQplData(
     dwio::common::ensureCapacity<char>(
     uncompressedData, uncompressedSize, &pool_);
 
-    Qplcodec qpl_dec(qpl_path_hardware,(qpl_compression_levels)1);
+    DeflateRleBpDecoder deflateCodec(pageData, dataPageHeader_, compressedSize, type_, pool_);
     if (qpl_job_id > 0) {
         std::cout << "qpl_job_id > 0  " << qpl_job_id << std::endl;
     }
 
-    qpl_job_id = qpl_dec.DecompressAsync(
+    qpl_job_id = deflateCodec.DecompressAsync(
         compressedSize,
         (const uint8_t*)pageData,
         uncompressedSize,
@@ -309,12 +316,19 @@ void QplPageReader::prefetchDataPageV1(const thrift::PageHeader& pageHeader) {
       pageHeader.__isset.data_page_header);
 
   dataPageData_ = readBytes(pageHeader.compressed_page_size, pageBuffer_);   
-  dataPageData_ = uncompressQplData(
-        dataPageData_,
-        pageHeader.compressed_page_size,
-        pageHeader.uncompressed_page_size,
-        uncompressedDataV1Data_,
-        data_qpl_job_id);
+  if ((pageHeader.data_page_header.encoding == Encoding::RLE_DICTIONARY || pageHeader.data_page_header.encoding == Encoding::PLAIN_DICTIONARY) 
+      && maxDefine_ == 0 && maxRepeat_ == 0 && type_->parquetType_.value() == thrift::Type::INT32) {
+    deflateDecoder_ = std::make_unique<DeflateRleBpDecoder>(
+            dataPageData_, pageHeader, pageHeader.uncompressed_page_size, type_, pool_);
+    decode_qpl_job_id = deflateDecoder_->rleDecompress();
+  } else {  
+    dataPageData_ = uncompressQplData(
+          dataPageData_,
+          pageHeader.compressed_page_size,
+          pageHeader.uncompressed_page_size,
+          uncompressedDataV1Data_,
+          data_qpl_job_id);
+  }
   return;
 
 }
@@ -526,6 +540,17 @@ void QplPageReader::prepareData(const thrift::PageHeader& pageHeader, int64_t ro
     makeDecoder();
   }
 }
+
+void QplPageReader::prepareDecodeData(const thrift::PageHeader& pageHeader, int64_t row) {
+  numRepDefsInPage_ = pageHeader.data_page_header.num_values;
+  setPageRowInfo(row == kRepDefOnly);
+  encoding_ = pageHeader.data_page_header.encoding;
+  if (!hasChunkRepDefs_ && (numRowsInPage_ == kRowsUnknown || maxDefine_ > 1)) {
+    readPageDefLevels();
+  }
+  pageData_ = dataPageData_;
+}
+
 void QplPageReader::prepareDataPageV1(const PageHeader& pageHeader, int64_t row) {
   VELOX_CHECK(
       pageHeader.type == thrift::PageType::DATA_PAGE &&
@@ -1153,6 +1178,7 @@ bool QplPageReader::rowsForPage(
   // Then check how many of the rows to visit are on the same page as the
   // current one.
   int32_t firstOnNextPage = rowOfPage_ + numRowsInPage_ - visitBase_;
+  // std::cout << "firstOnNextPage: " << firstOnNextPage << ", numVisitorRows_: " << numVisitorRows_ << ", visitorRows_[numVisitorRows_ - 1]: " << visitorRows_[numVisitorRows_ - 1] << std::endl;
   if (firstOnNextPage > visitorRows_[numVisitorRows_ - 1]) {
     // All the remaining rows are on this page.
     numToVisit = numVisitorRows_ - currentVisitorRow_;
@@ -1169,6 +1195,7 @@ bool QplPageReader::rowsForPage(
   }
   // If the page did not change and this is the first call, we can return a view
   // on the original visitor rows.
+  // std::cout << "rowOfPage_: " << rowOfPage_ << ", initialRowOfPage_: " << initialRowOfPage_ << ", currentVisitorRow_: " << currentVisitorRow_ <<
   if (rowOfPage_ == initialRowOfPage_ && currentVisitorRow_ == 0) {
     nulls =
         readNulls(visitorRows_[numToVisit - 1] + 1, reader.nullsInReadRange());
@@ -1245,14 +1272,14 @@ QplPageReader::~QplPageReader() {
     dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
     if (dict_qpl_job_id > 0) {
         qpl_job* job = qpl_job_pool.GetJobById(dict_qpl_job_id);
-        qpl_wait_job(job);
+        // qpl_wait_job(job);
         qpl_fini_job(job);
         qpl_job_pool.ReleaseJob(dict_qpl_job_id);
         dict_qpl_job_id = 0;
     }
     if (data_qpl_job_id > 0) {
         qpl_job* job = qpl_job_pool.GetJobById(data_qpl_job_id);
-        qpl_wait_job(job);
+        // qpl_wait_job(job);
         qpl_fini_job(job);
         qpl_job_pool.ReleaseJob(data_qpl_job_id);
         data_qpl_job_id = 0;        
@@ -1260,3 +1287,4 @@ QplPageReader::~QplPageReader() {
 }
 
 } // namespace facebook::velox::parquet
+#endif

@@ -84,9 +84,9 @@ qpl_job* QplJobHWPool::AcquireJob(uint32_t& job_id) {
     return nullptr;
   }
   uint32_t retry = 0;
-  auto index = folly::Random::rand32(0, MAX_JOB_NUMBER);
+  auto index = folly::Random::rand32(1, MAX_JOB_NUMBER / 2);
   while (!tryLockJob(index)) {
-    index = folly::Random::rand32(0, MAX_JOB_NUMBER);
+    index = folly::Random::rand32(1, MAX_JOB_NUMBER / 2);
     retry++;
     if (retry > MAX_JOB_NUMBER) {
       return nullptr;

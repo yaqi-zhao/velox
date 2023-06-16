@@ -24,6 +24,7 @@
 #include "velox/exec/Operator.h"
 #include "velox/exec/OperatorUtils.h"
 #include "velox/exec/Task.h"
+#include <iostream>
 
 using facebook::velox::common::testutil::TestValue;
 

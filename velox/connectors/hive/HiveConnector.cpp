@@ -28,6 +28,7 @@
 #include <boost/lexical_cast.hpp>
 
 #include <memory>
+#include <iostream>
 
 using namespace facebook::velox::exec;
 using namespace facebook::velox::dwrf;
@@ -629,7 +630,6 @@ std::optional<RowVectorPtr> HiveDataSource::next(
 
   auto rowsScanned = readNext(size);
   completedRows_ += rowsScanned;
-
   if (rowsScanned) {
     VELOX_CHECK(
         !output_->mayHaveNulls(), "Top-level row vector cannot have nulls");
