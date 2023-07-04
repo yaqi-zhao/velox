@@ -59,6 +59,7 @@ void QplPageReader::preDecompressPage() {
       default:
         break; // ignore INDEX page type and any other custom extensions   
     }
+    break;
   }
 }
 
@@ -67,18 +68,27 @@ void QplPageReader::seekToPage(int64_t row) {
   repeatDecoder_.reset();
   // 'rowOfPage_' is the row number of the first row of the next page.
   rowOfPage_ += numRowsInPage_;
+  bool has_qpl = false;
   if (dict_qpl_job_id > 0) {
     waitQplJob(dict_qpl_job_id);
     prepareDict(dictPageHeader_);
     dict_qpl_job_id = 0;
+    has_qpl = true;
   }
   if (data_qpl_job_id > 0) {
     waitQplJob(data_qpl_job_id);
     prepareData(dataPageHeader_, row);
     data_qpl_job_id = 0;
-    return;
+    has_qpl = true;
   }
 
+  if (has_qpl) {
+    if (row == kRepDefOnly || row < rowOfPage_ + numRowsInPage_) {
+      return;
+    }
+    updateRowInfoAfterPageSkipped();
+  }
+  
   for (;;) {
     auto dataStart = pageStart_;
     if (chunkSize_ <= pageStart_) {
@@ -175,7 +185,7 @@ const char* FOLLY_NONNULL QplPageReader::uncompressQplData(
 
     Qplcodec qpl_dec(qpl_path_hardware,(qpl_compression_levels)1);
     if (qpl_job_id > 0) {
-        std::cout << "qpl_job_id > 0  " << qpl_job_id << std::endl;
+        std::cout << "qpl_job_id > 0  " << qpl_job_id  << ", this: " << this << std::endl;
     }
 
     qpl_job_id = qpl_dec.DecompressAsync(
@@ -253,6 +263,19 @@ const char* FOLLY_NONNULL QplPageReader::uncompressData(
           "GZipCodec failed: {}",
           stream.msg ? stream.msg : "");
       return uncompressedData_->as<char>();
+    }
+    case thrift::CompressionCodec::QPL: {
+      dwio::common::ensureCapacity<char>(
+      uncompressedData_, uncompressedSize, &pool_);
+
+      Qplcodec qpl_dec(qpl_path_hardware,(qpl_compression_levels)1);
+
+      qpl_dec.DecompressSync(
+          compressedSize,
+          (const uint8_t*)pageData,
+          uncompressedSize,
+          (uint8_t *)uncompressedData_->asMutable<char>()); 
+      return uncompressedData_->as<char>();     
     }
      
     default:
