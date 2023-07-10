@@ -19,9 +19,9 @@ public:
   bool Decompress(int64_t input_length, const uint8_t* input,
                              int64_t output_buffer_length, uint8_t* output);
   uint32_t DecompressAsync(int64_t input_length, const uint8_t* input,
-                             int64_t output_buffer_length, uint8_t* output); 
+                             int64_t output_buffer_length, uint8_t* output, bool isGzip);
   uint32_t DecompressSync(int64_t input_length, const uint8_t* input,
-                             int64_t output_buffer_length, uint8_t* output);                        
+                             int64_t output_buffer_length, uint8_t* output, bool isGzip); 
   bool Compress(int64_t input_length, const uint8_t* input,
                              int64_t output_buffer_length, uint8_t* output);                        
 

@@ -188,11 +188,14 @@ const char* FOLLY_NONNULL QplPageReader::uncompressQplData(
         std::cout << "qpl_job_id > 0  " << qpl_job_id  << ", this: " << this << std::endl;
     }
 
+    bool isGzip = codec_ == thrift::CompressionCodec::GZIP;
+
     qpl_job_id = qpl_dec.DecompressAsync(
         compressedSize,
         (const uint8_t*)pageData,
         uncompressedSize,
-        (uint8_t *)uncompressedData->asMutable<char>());
+        (uint8_t *)uncompressedData->asMutable<char>(),
+        isGzip);
     return nullptr;
 }
 const char* FOLLY_NONNULL QplPageReader::uncompressData(
@@ -274,7 +277,8 @@ const char* FOLLY_NONNULL QplPageReader::uncompressData(
           compressedSize,
           (const uint8_t*)pageData,
           uncompressedSize,
-          (uint8_t *)uncompressedData_->asMutable<char>()); 
+          (uint8_t *)uncompressedData_->asMutable<char>(),
+          false); 
       return uncompressedData_->as<char>();     
     }
      

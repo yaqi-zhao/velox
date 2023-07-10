@@ -109,7 +109,8 @@ if(VELOX_ENABLE_QPL)
     -DEFFICIENT_WAIT=OFF
     -DQPL_BUILD_TESTS=0
     -DCMAKE_C_COMPILER=gcc
-    -DCMAKE_CXX_COMPILER=g++)
+    -DCMAKE_CXX_COMPILER=g++
+    -DQPL_LIB=ON)
 
   set(QPL_PATCH_COMMAND
       "sed" "-i" "20,27d"
@@ -118,6 +119,7 @@ if(VELOX_ENABLE_QPL)
   ExternalProject_Add(qpl_ep
                       ${EP_LOG_OPTIONS}
                       URL https://github.com/intel/qpl/archive/refs/tags/v1.1.0.tar.gz
+#                      URL https://github.com/yaqi-zhao/qpl/archive/refs/heads/b1.1.0.zip 
                       PATCH_COMMAND ${QPL_PATCH_COMMAND}
                       BUILD_BYPRODUCTS "${QPL_STATIC_LIB}"
                       CMAKE_ARGS ${QPL_CMAKE_ARGS}

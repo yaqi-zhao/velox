@@ -128,7 +128,7 @@ bool Qplcodec::Decompress(int64_t input_length, const uint8_t* input,
 }
 
 uint32_t Qplcodec::DecompressSync(int64_t input_length, const uint8_t* input,
-                             int64_t output_buffer_length, uint8_t* output)  {
+                             int64_t output_buffer_length, uint8_t* output, bool isGzip)  {
     if (output_buffer_length == 0) {
       // The zlib library does not allow *output to be NULL, even when
       // output_buffer_length is 0 (inflate() will return Z_STREAM_ERROR). We don't
@@ -150,7 +150,10 @@ uint32_t Qplcodec::DecompressSync(int64_t input_length, const uint8_t* input,
     job->next_out_ptr = output;
     job->available_in = input_length;
     job->available_out = output_buffer_length;
-    job->flags = QPL_FLAG_FIRST | QPL_FLAG_LAST;
+    job->flags = QPL_FLAG_FIRST | QPL_FLAG_LAST ;
+    if (isGzip) {
+      job->flags |= QPL_FLAG_GZIP_MODE;
+    }    
     job->numa_id = 1;
 
     //decompression
@@ -158,7 +161,7 @@ uint32_t Qplcodec::DecompressSync(int64_t input_length, const uint8_t* input,
     qpl_fini_job(job);
     qpl_job_pool.ReleaseJob(job_id);
     if (status != QPL_STS_OK) {
-        throw std::runtime_error("Error while decompression occurred. Status: " + std::to_string(status));
+        throw std::runtime_error("Error while decompression sync occurred. Status: " + std::to_string(status));
         std::atomic_store(&job_status[job_id],false);
     } else {
       return 0;
@@ -166,7 +169,7 @@ uint32_t Qplcodec::DecompressSync(int64_t input_length, const uint8_t* input,
 }
 
 uint32_t Qplcodec::DecompressAsync(int64_t input_length, const uint8_t* input,
-                             int64_t output_buffer_length, uint8_t* output)  {
+                             int64_t output_buffer_length, uint8_t* output, bool isGzip)  {
     if (output_buffer_length == 0) {
       // The zlib library does not allow *output to be NULL, even when
       // output_buffer_length is 0 (inflate() will return Z_STREAM_ERROR). We don't
@@ -189,6 +192,9 @@ uint32_t Qplcodec::DecompressAsync(int64_t input_length, const uint8_t* input,
     job->available_in = input_length;
     job->available_out = output_buffer_length;
     job->flags = QPL_FLAG_FIRST | QPL_FLAG_LAST;
+    if (isGzip) {
+      job->flags |= QPL_FLAG_GZIP_MODE;
+    }
     job->numa_id = 1;
 
     //decompression
@@ -201,7 +207,7 @@ uint32_t Qplcodec::DecompressAsync(int64_t input_length, const uint8_t* input,
       // std::cout << "submit decompress job error : check_time " << check_time << ", status: " << (int)status << std::endl;
     }
     if (status != QPL_STS_OK) {
-        throw std::runtime_error("Error while decompression occurred. Status: " + std::to_string(status));
+        throw std::runtime_error("Error while decompression async occurred. Status: " + std::to_string(status));
         std::atomic_store(&job_status[job_id],false);
     } else {
       return job_id;
