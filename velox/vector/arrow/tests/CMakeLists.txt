@@ -16,6 +16,11 @@ add_executable(velox_arrow_bridge_test ArrowBridgeArrayTest.cpp
 
 add_test(velox_arrow_bridge_test velox_arrow_bridge_test)
 
+set(QPL_STATIC_LINK_LIBS ${QPL_STATIC_LINK_LIBS})
+if(VELOX_ENABLE_QPL)
+  list(APPEND QPL_STATIC_LINK_LIBS qpl::qpl)
+endif()
+
 target_link_libraries(
   velox_arrow_bridge_test
   velox_core
@@ -25,4 +30,5 @@ target_link_libraries(
   gtest
   gtest_main
   glog::glog
+  ${QPL_STATIC_LINK_LIBS}
   dl)

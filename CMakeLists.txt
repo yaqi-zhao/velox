@@ -78,6 +78,7 @@ option(VELOX_ENABLE_HDFS "Build Hdfs Connector" OFF)
 option(VELOX_ENABLE_PARQUET "Enable Parquet support" OFF)
 option(VELOX_ENABLE_ARROW "Enable Arrow support" OFF)
 option(VELOX_ENABLE_CCACHE "Use ccache if installed." ON)
+option(VELOX_ENABLE_QPL "Enable Intel QPL support" ON)
 
 option(VELOX_BUILD_TEST_UTILS "Builds Velox test utilities" OFF)
 option(VELOX_BUILD_PYTHON_PACKAGE "Builds Velox Python bindings" OFF)
@@ -184,6 +185,10 @@ if(VELOX_ENABLE_S3)
   add_definitions(-DVELOX_ENABLE_S3)
 endif()
 
+if(VELOX_ENABLE_QPL)
+  add_definitions(-DVELOX_ENABLE_QPL)
+endif()
+
 if(VELOX_ENABLE_GCS)
   # Set GCS_ROOT_DIR if you have a custom install location of GCS SDK CPP.
   if(GCSSDK_ROOT_DIR)
@@ -261,6 +266,8 @@ message("Setting CMAKE_CXX_FLAGS=${SCRIPT_CXX_FLAGS}")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SCRIPT_CXX_FLAGS}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D USE_VELOX_COMMON_BASE")
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${SCRIPT_CXX_FLAGS} -ldl -laccel-config -L/usr/lib64")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D HAS_UNCAUGHT_EXCEPTIONS")
 if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64")
@@ -377,6 +384,8 @@ if(NOT ${VELOX_BUILD_MINIMAL})
     add_library(zstd::zstd ALIAS zstd::libzstd_${ZSTD_TYPE})
   endif()
 endif()
+
+link_directories("/usr/lib64/")
 
 set_source(re2)
 resolve_dependency(re2)

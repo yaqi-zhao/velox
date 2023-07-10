@@ -18,6 +18,7 @@
 
 #include "velox/dwio/common/DataBuffer.h"
 #include "velox/dwio/common/DataSink.h"
+#include <arrow/util/compression.h> // @manual
 
 #include "velox/vector/ComplexVector.h"
 

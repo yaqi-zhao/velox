@@ -15,6 +15,11 @@
 add_library(velox_file_test_utils TestUtils.cpp)
 target_link_libraries(velox_file_test_utils velox_file)
 
+set(QPL_STATIC_LINK_LIBS ${QPL_STATIC_LINK_LIBS})
+if(VELOX_ENABLE_QPL)
+  list(APPEND QPL_STATIC_LINK_LIBS qpl::qpl)
+endif()
+
 add_executable(velox_file_test FileTest.cpp UtilsTest.cpp)
 add_test(velox_file_test velox_file_test)
 target_link_libraries(
@@ -27,4 +32,5 @@ target_link_libraries(
   Folly::folly
   gtest
   gtest_main
+  ${QPL_STATIC_LINK_LIBS}
   gmock)

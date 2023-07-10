@@ -17,6 +17,49 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
 
 include(ExternalProject)
 
+if(VELOX_ENABLE_QPL)
+  message(STATUS "Building QPL from source")
+  set(QPL_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/qpl_ep/install")
+  set(QPL_STATIC_LIB_NAME ${CMAKE_STATIC_LIBRARY_PREFIX}qpl${CMAKE_STATIC_LIBRARY_SUFFIX})
+  set(QPL_STATIC_LIB "${QPL_PREFIX}/lib/${QPL_STATIC_LIB_NAME}")
+
+  set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -ldl -laccel-config -L/usr/lib64")    
+
+  set(QPL_CMAKE_ARGS
+    -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_INSTALL_LIBDIR=${QPL_PREFIX}/lib
+    -DCMAKE_INSTALL_PREFIX=${QPL_PREFIX}
+    -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
+    -DEFFICIENT_WAIT=OFF
+    -DQPL_BUILD_TESTS=0)
+
+  set(QPL_PATCH_COMMAND
+      "sed" "-i" "20,27d"
+      "${CMAKE_CURRENT_BINARY_DIR}/qpl_ep-prefix/src/qpl_ep/tools/CMakeLists.txt")
+
+  ExternalProject_Add(qpl_ep
+                      ${EP_LOG_OPTIONS}
+                      URL https://github.com/intel/qpl/archive/refs/tags/v1.1.0.tar.gz
+                      PATCH_COMMAND ${QPL_PATCH_COMMAND}
+                      BUILD_BYPRODUCTS "${QPL_STATIC_LIB}"
+                      CMAKE_ARGS ${QPL_CMAKE_ARGS}
+                     )
+
+  file(MAKE_DIRECTORY "${QPL_PREFIX}/include")
+
+  add_library(qpl::qpl STATIC IMPORTED GLOBAL)
+  set(QPL_LIBRARIES ${QPL_STATIC_LIB})
+  set(QPL_INCLUDE_DIRS "${QPL_PREFIX}/include")
+  target_link_libraries(qpl::qpl INTERFACE /usr/lib64/libaccel-config.so)
+  set_target_properties(qpl::qpl
+                        PROPERTIES IMPORTED_LOCATION ${QPL_LIBRARIES}
+                                   INTERFACE_INCLUDE_DIRECTORIES ${QPL_INCLUDE_DIRS})
+
+  add_dependencies(qpl::qpl qpl_ep)
+
+endif()
+
+
 if(VELOX_ENABLE_ARROW)
   find_package(Thrift)
   if(Thrift_FOUND)
@@ -33,6 +76,7 @@ if(VELOX_ENABLE_ARROW)
       -DARROW_WITH_ZSTD=ON
       -DARROW_JEMALLOC=OFF
       -DARROW_SIMD_LEVEL=NONE
+      -DARROW_WITH_QPL=ON
       -DARROW_RUNTIME_SIMD_LEVEL=NONE
       -DARROW_WITH_UTF8PROC=OFF
       -DCMAKE_INSTALL_PREFIX=${ARROW_PREFIX}/install
@@ -45,7 +89,7 @@ if(VELOX_ENABLE_ARROW)
   if(NOT Thrift_FOUND)
     set(THRIFT_ROOT ${ARROW_PREFIX}/src/arrow_ep-build/thrift_ep-install)
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-      set(THRIFT_LIB ${THRIFT_ROOT}/lib/libthriftd.a)
+      set(THRIFT_LIB ${THRIFT_ROOT}/lib/libthrift.a)
     else()
       set(THRIFT_LIB ${THRIFT_ROOT}/lib/libthrift.a)
     endif()
@@ -60,9 +104,12 @@ if(VELOX_ENABLE_ARROW)
 
   set(VELOX_ARROW_BUILD_VERSION 8.0.0)
   set(VELOX_ARROW_BUILD_SHA256_CHECKSUM
-      ad9a05705117c989c116bae9ac70492fe015050e1b80fb0e38fde4b5d863aaa3)
+#      ad9a05705117c989c116bae9ac70492fe015050e1b80fb0e38fde4b5d863aaa3
+      6bbc4e7091a76bf6ceed8dbd7c69a8db9f460ad94c99d8794c8a838275fe5e7c
+  )
   set(VELOX_ARROW_SOURCE_URL
-      "https://archive.apache.org/dist/arrow/arrow-${VELOX_ARROW_BUILD_VERSION}/apache-arrow-${VELOX_ARROW_BUILD_VERSION}.tar.gz"
+#      "https://archive.apache.org/dist/arrow/arrow-${VELOX_ARROW_BUILD_VERSION}/apache-arrow-${VELOX_ARROW_BUILD_VERSION}.tar.gz"  
+      "https://github.com/yaqi-zhao/arrow_1/archive/refs/heads/master_1.zip"
   )
 
   resolve_dependency_url(ARROW)
@@ -91,3 +138,4 @@ if(VELOX_ENABLE_ARROW)
                                            ${ARROW_LIBDIR}/libparquet.a)
 
 endif()
+
