@@ -123,6 +123,9 @@ qpl_job* QplJobHWPool::AcquireDeflateJob(uint32_t& job_id) {
 }
 
 void QplJobHWPool::ReleaseJob(uint32_t job_id) {
+    if (job_id >= MAX_JOB_NUMBER) {
+      return;
+    }
     assert(job_id < MAX_JOB_NUMBER);
     hw_job_ptr_locks[job_id].store(false);  
     // std::cout << "ReleaseJob job_id: " << job_id << std::endl;      

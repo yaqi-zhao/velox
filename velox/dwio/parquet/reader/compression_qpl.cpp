@@ -7,6 +7,9 @@
 #include <atomic>
 //#include <stdatomic.h>
 //#include <stdbool.h>
+#include <unistd.h>       // for syscall()
+#include <sys/syscall.h> 
+#include <thread>
 
 #ifdef VELOX_ENABLE_QPL  
 
@@ -141,9 +144,8 @@ uint32_t Qplcodec::DecompressSync(int64_t input_length, const uint8_t* input,
     dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
     uint32_t job_id = 0;
     qpl_job* job = qpl_job_pool.AcquireDeflateJob(job_id);
-    VELOX_DCHECK(job != nullptr, "Acquire QPL Deflate Job failed.");
     if (job == nullptr) {
-        throw std::runtime_error("Acquire QPL Deflate Job failed. ");
+      return qpl_job_pool.MAX_JOB_NUMBER; // Invalid job id to illustrate the failed decompress job.
     }
     job->op = qpl_op_decompress;
     job->next_in_ptr = const_cast<uint8_t*>(input);
@@ -154,7 +156,7 @@ uint32_t Qplcodec::DecompressSync(int64_t input_length, const uint8_t* input,
     if (isGzip) {
       job->flags |= QPL_FLAG_GZIP_MODE;
     }    
-    job->numa_id = 1;
+    // job->numa_id = 1;
 
     //decompression
     qpl_status status = qpl_execute_job(job);
@@ -162,7 +164,6 @@ uint32_t Qplcodec::DecompressSync(int64_t input_length, const uint8_t* input,
     qpl_job_pool.ReleaseJob(job_id);
     if (status != QPL_STS_OK) {
         throw std::runtime_error("Error while decompression sync occurred. Status: " + std::to_string(status));
-        std::atomic_store(&job_status[job_id],false);
     } else {
       return 0;
     }
@@ -180,11 +181,12 @@ uint32_t Qplcodec::DecompressAsync(int64_t input_length, const uint8_t* input,
 
     // Reset the stream for this block
     dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
+    // return qpl_job_pool.MAX_JOB_NUMBER; 
     uint32_t job_id = 0;
     qpl_job* job = qpl_job_pool.AcquireDeflateJob(job_id);
-    VELOX_DCHECK(job != nullptr, "Acquire QPL Deflate Job failed.");
     if (job == nullptr) {
-        throw std::runtime_error("Acquire QPL Deflate Job failed. ");
+        // std::cout << "cannot get qpl job" << std::endl;
+        return qpl_job_pool.MAX_JOB_NUMBER; // Invalid job id to illustrate the failed decompress job.
     }
     job->op = qpl_op_decompress;
     job->next_in_ptr = const_cast<uint8_t*>(input);
@@ -195,20 +197,36 @@ uint32_t Qplcodec::DecompressAsync(int64_t input_length, const uint8_t* input,
     if (isGzip) {
       job->flags |= QPL_FLAG_GZIP_MODE;
     }
-    job->numa_id = 1;
+    // job->numa_id = 1;
 
     //decompression
+    // std::cout <<"id: " << std::this_thread::get_id()  << ", before submit , input: " << static_cast<const void *>(job->next_in_ptr) <<  std::endl;
     qpl_status status = qpl_submit_job(job);
-    uint32_t check_time = 0;
-    while (status == QPL_STS_QUEUES_ARE_BUSY_ERR && check_time < UINT32_MAX - 1) {
-      _umwait(1, __rdtsc() + 8000);
+    uint32_t check_time = 10;
+    while (status == QPL_STS_QUEUES_ARE_BUSY_ERR && check_time < UINT32_MAX) {
+      qpl_job_pool.ReleaseJob(job_id);
+      job = qpl_job_pool.AcquireDeflateJob(job_id);
+      if (job == nullptr) {
+          return qpl_job_pool.MAX_JOB_NUMBER; // Invalid job id to illustrate the failed decompress job.
+      }
+      job->op = qpl_op_decompress;
+      job->next_in_ptr = const_cast<uint8_t*>(input);
+      job->next_out_ptr = output;
+      job->available_in = input_length;
+      job->available_out = output_buffer_length;
+      job->flags = QPL_FLAG_FIRST | QPL_FLAG_LAST;
+      if (isGzip) {
+        job->flags |= QPL_FLAG_GZIP_MODE;
+      }
+      _umwait(1, __rdtsc() + 1000);
       check_time++;
       status = qpl_submit_job(job);
-      // std::cout << "submit decompress job error : check_time " << check_time << ", status: " << (int)status << std::endl;
+        // std::cout << "id: " <<std::this_thread::get_id() << ", submit decompress job error : " << ", status: " << (int)status << ", input: " << static_cast<const void *>(job->next_in_ptr) <<  std::endl;
     }
     if (status != QPL_STS_OK) {
-        throw std::runtime_error("Error while decompression async occurred. Status: " + std::to_string(status));
-        std::atomic_store(&job_status[job_id],false);
+        qpl_job_pool.ReleaseJob(job_id);
+        std::cout << "cannot submit job because of QPL_STS_QUEUES_ARE_BUSY_ERR" << std::endl;
+        return qpl_job_pool.MAX_JOB_NUMBER; // Invalid job id to illustrate the failed decompress job.
     } else {
       return job_id;
     }

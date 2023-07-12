@@ -86,9 +86,29 @@ void ParquetData::prefetchRowGroup(uint32_t index) {
   auto& chunk = rowGroups_[index].columns[type_->column];
   auto& metaData = chunk.meta_data;
   if (metaData.codec == thrift::CompressionCodec::QPL || metaData.codec == thrift::CompressionCodec::GZIP) {
-    if (pageReaders_[index] != nullptr) {
-      pageReaders_[index]->preDecompressPage();
+    if (qplReader_ != nullptr) {
+      if (current_index != index) {
+        // std::cout << "current index: " << current_index << ", index: " << index << std::endl;
+        qplReader_ = std::make_unique<QplPageReader>(
+          std::move(streams_[index]),
+          pool_,
+          type_,
+          metaData.codec,
+          metaData.total_compressed_size);        
+      }
+    } else {
+      qplReader_ = std::make_unique<QplPageReader>(
+        std::move(streams_[index]),
+        pool_,
+        type_,
+        metaData.codec,
+        metaData.total_compressed_size);
     }
+    qplReader_->preDecompressPage();
+    current_index = index;
+    // if (pageReaders_[index] != nullptr) {
+      // pageReaders_[index]->preDecompressPage();
+    // }
   }
 }
 
@@ -117,15 +137,16 @@ void ParquetData::enqueueRowGroup(
 
   auto id = dwio::common::StreamIdentifier(type_->column);
   streams_[index] = input.enqueue({chunkReadOffset, readSize}, &id);
-  if (metaData.codec == thrift::CompressionCodec::QPL || metaData.codec == thrift::CompressionCodec::GZIP) {
-    pageReaders_.resize(rowGroups_.size());
-    pageReaders_[index] = std::make_unique<QplPageReader>(
-      std::move(streams_[index]),
-      pool_,
-      type_,
-      metaData.codec,
-      metaData.total_compressed_size);
-  }
+  // if (metaData.codec == thrift::CompressionCodec::QPL || metaData.codec == thrift::CompressionCodec::GZIP) {
+  //   std::cout << "rowGroups_ size: " << rowGroups_.size() << std::endl;
+  //   pageReaders_.resize(rowGroups_.size());
+  //   pageReaders_[index] = std::make_unique<QplPageReader>(
+  //     std::move(streams_[index]),
+  //     pool_,
+  //     type_,
+  //     metaData.codec,
+  //     metaData.total_compressed_size);
+  // }
 }
 
 dwio::common::PositionProvider ParquetData::seekToRowGroup(uint32_t index) {
@@ -134,17 +155,25 @@ dwio::common::PositionProvider ParquetData::seekToRowGroup(uint32_t index) {
   // VELOX_CHECK(streams_[index], "Stream not enqueued for column");
   auto& metadata = rowGroups_[index].columns[type_->column].meta_data;
   if (metadata.codec == thrift::CompressionCodec::QPL || metadata.codec == thrift::CompressionCodec::GZIP) {
-    if (pageReaders_[index] == nullptr) {
-      pageReaders_.resize(rowGroups_.size());
-      pageReaders_[index] = std::make_unique<QplPageReader>(
+    if (qplReader_ == nullptr || current_index != index) {
+      // std::cout << "qplReader is nullptr when seekToRowGroup" << std::endl;
+      qplReader_ = std::make_unique<QplPageReader>(
         std::move(streams_[index]),
         pool_,
         type_,
         metadata.codec,
         metadata.total_compressed_size);
     }
-    qplReader_ = std::move(pageReaders_[index]);
-    // qplReader_->preDecompressPage();
+    // if (pageReaders_[index] == nullptr) {
+    //   pageReaders_.resize(rowGroups_.size());
+    //   pageReaders_[index] = std::make_unique<QplPageReader>(
+    //     std::move(streams_[index]),
+    //     pool_,
+    //     type_,
+    //     metadata.codec,
+    //     metadata.total_compressed_size);
+    // }
+    // qplReader_ = std::move(pageReaders_[index]);
   } else {
     reader_ = std::make_unique<PageReader>(
         std::move(streams_[index]),

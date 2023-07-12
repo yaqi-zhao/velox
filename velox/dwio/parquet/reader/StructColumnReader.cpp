@@ -109,6 +109,7 @@ void StructColumnReader::enqueueRowGroup(
 }
 
 void StructColumnReader::prefetchRowGroup(uint32_t index) {
+  int i = 0;
   for (auto& child : children_) {
     if (auto structChild = dynamic_cast<StructColumnReader*>(child)) {
       continue;
@@ -117,7 +118,10 @@ void StructColumnReader::prefetchRowGroup(uint32_t index) {
     } else if (auto mapChild = dynamic_cast<MapColumnReader*>(child)) {
       continue;
     } else {
+      // if (i < 1) {
       child->formatData().as<ParquetData>().prefetchRowGroup(index);
+      // }
+      i++;
     }
   }
 }

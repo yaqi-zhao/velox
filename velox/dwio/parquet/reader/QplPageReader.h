@@ -52,6 +52,8 @@ class QplPageReader {
     type_->makeLevelInfo(leafInfo_);
     dict_qpl_job_id = 0;
     data_qpl_job_id = 0;
+    uncompressedDictData_ = nullptr;
+    uncompressedDataV1Data_ = nullptr;
   }
 
   // This PageReader constructor is for unit test only.
@@ -154,8 +156,8 @@ class QplPageReader {
   // is filled for 'numRows' bits.
   const uint64_t* FOLLY_NULLABLE readNulls(int32_t numRows, BufferPtr& buffer);
 
-  void prepareDict(const thrift::PageHeader& pageHeader);
-  void prepareData(const thrift::PageHeader& pageHeader, int64_t row);
+  void prepareDict(const thrift::PageHeader& pageHeader, bool job_success);
+  void prepareData(const thrift::PageHeader& pageHeader, int64_t row, bool job_success);
 
   // Skips the define decoder, if any, for 'numValues' top level
   // rows. Returns the number of non-nulls skipped. The range is the
@@ -204,7 +206,7 @@ class QplPageReader {
   void prefetchDataPageV1(const thrift::PageHeader& pageHeader);
   void prefetchDataPageV2(const thrift::PageHeader& pageHeader);
   void prefetchDictionary(const thrift::PageHeader& pageHeader);
-  void waitQplJob(uint32_t job_id);
+  bool waitQplJob(uint32_t job_id);
 
 
   // For a non-top level leaf, reads the defs and sets 'leafNulls_' and
@@ -225,7 +227,7 @@ class QplPageReader {
       uint32_t compressedSize,
       uint32_t uncompressedSize);
 
-  const char* FOLLY_NONNULL uncompressQplData(
+  const bool FOLLY_NONNULL uncompressQplData(
       const char* FOLLY_NONNULL pageData,
       uint32_t compressedSize,
       uint32_t uncompressedSize,
@@ -437,7 +439,9 @@ class QplPageReader {
   // Uncompressed data for the page. Rep-def-data in V1, data alone in V2.
   BufferPtr uncompressedData_;
   BufferPtr uncompressedDictData_;
+  // char* uncompressedDictData_;
   BufferPtr uncompressedDataV1Data_;
+  // char* uncompressedDataV1Data_;
 
   // First byte of uncompressed encoded data. Contains the encoded data as a
   // contiguous run of bytes.
@@ -515,6 +519,9 @@ class QplPageReader {
 
   uint32_t dict_qpl_job_id;
   uint32_t data_qpl_job_id;  
+
+  bool pre_decompress_dict = false;
+  bool pre_decompress_data = false;
 };
 
 template <typename Visitor>

@@ -214,13 +214,14 @@ class ParquetData : public dwio::common::FormatData {
   // Streams for this column in each of 'rowGroups_'. Will be created on or
   // ahead of first use, not at construction.
   std::vector<std::unique_ptr<dwio::common::SeekableInputStream>> streams_;
-  std::vector<std::unique_ptr<QplPageReader>> pageReaders_;
+  // std::vector<std::unique_ptr<QplPageReader>> pageReaders_;
 
   const uint32_t maxDefine_;
   const uint32_t maxRepeat_;
   int64_t rowsInRowGroup_;
   std::unique_ptr<PageReader> reader_;
   std::unique_ptr<QplPageReader> qplReader_ = nullptr;
+  uint32_t current_index;
   
 
   // Nulls derived from leaf repdefs for non-leaf readers.

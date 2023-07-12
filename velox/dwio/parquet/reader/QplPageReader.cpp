@@ -35,6 +35,7 @@ using thrift::PageHeader;
 
 
 void QplPageReader::preDecompressPage() {
+  // return;
   for (;;) {
     auto dataStart = pageStart_;
     if (chunkSize_ <= pageStart_) {
@@ -70,14 +71,14 @@ void QplPageReader::seekToPage(int64_t row) {
   rowOfPage_ += numRowsInPage_;
   bool has_qpl = false;
   if (dict_qpl_job_id > 0) {
-    waitQplJob(dict_qpl_job_id);
-    prepareDict(dictPageHeader_);
+    bool job_success = waitQplJob(dict_qpl_job_id);
+    prepareDict(dictPageHeader_, job_success);
     dict_qpl_job_id = 0;
     has_qpl = true;
   }
   if (data_qpl_job_id > 0) {
-    waitQplJob(data_qpl_job_id);
-    prepareData(dataPageHeader_, row);
+    bool job_success = waitQplJob(data_qpl_job_id);
+    prepareData(dataPageHeader_, row, job_success);
     data_qpl_job_id = 0;
     has_qpl = true;
   }
@@ -174,7 +175,7 @@ const char* QplPageReader::readBytes(int32_t size, BufferPtr& copy) {
   return copy->as<char>();
 }
 
-const char* FOLLY_NONNULL QplPageReader::uncompressQplData(
+const bool FOLLY_NONNULL QplPageReader::uncompressQplData(
     const char* pageData,
     uint32_t compressedSize,
     uint32_t uncompressedSize,
@@ -196,7 +197,10 @@ const char* FOLLY_NONNULL QplPageReader::uncompressQplData(
         uncompressedSize,
         (uint8_t *)uncompressedData->asMutable<char>(),
         isGzip);
-    return nullptr;
+    if (qpl_job_id >= dwio::common::QplJobHWPool::GetInstance().MAX_JOB_NUMBER) {
+      return false;
+    }
+    return true;
 }
 const char* FOLLY_NONNULL QplPageReader::uncompressData(
     const char* pageData,
@@ -334,9 +338,9 @@ void QplPageReader::prefetchDataPageV1(const thrift::PageHeader& pageHeader) {
   VELOX_CHECK(
       pageHeader.type == thrift::PageType::DATA_PAGE &&
       pageHeader.__isset.data_page_header);
-
+  
   dataPageData_ = readBytes(pageHeader.compressed_page_size, pageBuffer_);   
-  dataPageData_ = uncompressQplData(
+  pre_decompress_data = uncompressQplData(
         dataPageData_,
         pageHeader.compressed_page_size,
         pageHeader.uncompressed_page_size,
@@ -360,17 +364,26 @@ void QplPageReader::prefetchDictionary(const thrift::PageHeader& pageHeader) {
       dictionaryEncoding_ == Encoding::PLAIN_DICTIONARY ||
       dictionaryEncoding_ == Encoding::PLAIN);  
   dictPageData_ = readBytes(pageHeader.compressed_page_size, pageBuffer_);
-  dictPageData_ = uncompressQplData(
+
+  pre_decompress_dict = uncompressQplData(
         dictPageData_,
         pageHeader.compressed_page_size,
         pageHeader.uncompressed_page_size,
         uncompressedDictData_,
         dict_qpl_job_id);
+  
   return;
 }
 
-void QplPageReader::prepareDict(const thrift::PageHeader& pageHeader) {
-  dictPageData_ = uncompressedDictData_->as<char>();
+void QplPageReader::prepareDict(const thrift::PageHeader& pageHeader, bool job_success) {
+  if (!pre_decompress_dict || !job_success) {
+      dictPageData_ = uncompressData(
+      dictPageData_,
+      pageHeader.compressed_page_size,
+      pageHeader.uncompressed_page_size);
+  } else{
+    dictPageData_ = uncompressedDictData_->as<char>();
+  }
 
   auto parquetType = type_->parquetType_.value();
   switch (parquetType) {
@@ -507,14 +520,20 @@ void QplPageReader::prepareDict(const thrift::PageHeader& pageHeader) {
       VELOX_UNSUPPORTED(
           "Parquet type {} not supported for dictionary", parquetType);
   }    
-
 }
 
-void QplPageReader::prepareData(const thrift::PageHeader& pageHeader, int64_t row) {
+void QplPageReader::prepareData(const thrift::PageHeader& pageHeader, int64_t row, bool job_success) {
+  if (!pre_decompress_data || !job_success) {
+      dataPageData_ = uncompressData(
+      dataPageData_,
+      pageHeader.compressed_page_size,
+      pageHeader.uncompressed_page_size);    
+  } else {
+    dataPageData_ = uncompressedDataV1Data_->as<char>();
+  }
   numRepDefsInPage_ = pageHeader.data_page_header.num_values;
   setPageRowInfo(row == kRepDefOnly);
 
-  dataPageData_ = uncompressedDataV1Data_->as<char>();
 
   auto pageEnd = dataPageData_ + pageHeader.uncompressed_page_size;
   if (maxRepeat_ > 0) {
@@ -970,6 +989,9 @@ void QplPageReader::makeDecoder() {
   switch (encoding_) {
     case Encoding::RLE_DICTIONARY:
     case Encoding::PLAIN_DICTIONARY:
+      if (pageData_ == nullptr) {
+        std::cout << "pageData_ is nullptr" << std::endl;
+      }
       dictionaryIdDecoder_ = std::make_unique<RleBpDataDecoder>(
           pageData_ + 1, pageData_ + encodedDataSize_, pageData_[0]);
       break;
@@ -1244,13 +1266,14 @@ const VectorPtr& QplPageReader::dictionaryValues(const TypePtr& type) {
   return dictionaryValues_;
 }
 
-void QplPageReader::waitQplJob(uint32_t job_id) {
+bool QplPageReader::waitQplJob(uint32_t job_id) {
   dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
   if (job_id <= 0 || job_id >= qpl_job_pool.MAX_JOB_NUMBER) {
-    return;
+    job_id = 0;
+    return true;
   }
-
   qpl_job* job = qpl_job_pool.GetJobById(job_id);
+
   auto status = qpl_check_job(job);
   uint32_t check_time = 0;
   while (status == QPL_STS_BEING_PROCESSED && check_time < UINT32_MAX - 1)
@@ -1265,18 +1288,21 @@ void QplPageReader::waitQplJob(uint32_t job_id) {
   
   qpl_fini_job(job);
   qpl_job_pool.ReleaseJob(job_id);
-  VELOX_DCHECK(status == QPL_STS_OK, "Check of QPL Job failed, status: {}, job_id: {}, sys_id: {}", status, job_id);
+  if (status != QPL_STS_OK) {
+      return false;   
+  }
+  return true;
 }
 
 QplPageReader::~QplPageReader() {
     dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
-    if (dict_qpl_job_id > 0) {
+    if (dict_qpl_job_id > 0 && dict_qpl_job_id < qpl_job_pool.MAX_JOB_NUMBER) {
         qpl_job* job = qpl_job_pool.GetJobById(dict_qpl_job_id);
         qpl_fini_job(job);
         qpl_job_pool.ReleaseJob(dict_qpl_job_id);
         dict_qpl_job_id = 0;
     }
-    if (data_qpl_job_id > 0) {
+    if (data_qpl_job_id > 0 && data_qpl_job_id < qpl_job_pool.MAX_JOB_NUMBER) {
         qpl_job* job = qpl_job_pool.GetJobById(data_qpl_job_id);
         qpl_fini_job(job);
         qpl_job_pool.ReleaseJob(data_qpl_job_id);
