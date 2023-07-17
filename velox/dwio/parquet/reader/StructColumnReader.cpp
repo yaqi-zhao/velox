@@ -108,6 +108,20 @@ void StructColumnReader::enqueueRowGroup(
   }
 }
 
+void StructColumnReader::prefetchRowGroup(uint32_t index) {
+  for (auto& child : children_) {
+    if (auto structChild = dynamic_cast<StructColumnReader*>(child)) {
+      continue;
+    } else if (auto listChild = dynamic_cast<ListColumnReader*>(child)) {
+      continue;
+    } else if (auto mapChild = dynamic_cast<MapColumnReader*>(child)) {
+      continue;
+    } else {
+      child->formatData().as<ParquetData>().prefetchRowGroup(index);
+    }
+  }
+}
+
 void StructColumnReader::seekToRowGroup(uint32_t index) {
   SelectiveColumnReader::seekToRowGroup(index);
   BufferPtr noBuffer;

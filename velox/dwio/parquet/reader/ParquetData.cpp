@@ -82,6 +82,16 @@ bool ParquetData::rowGroupMatches(
   return true;
 }
 
+void ParquetData::prefetchRowGroup(uint32_t index) {
+  auto& chunk = rowGroups_[index].columns[type_->column];
+  auto& metaData = chunk.meta_data;
+  if (metaData.codec == thrift::CompressionCodec::QPL) {
+    if (pageReaders_[index] != nullptr) {
+      pageReaders_[index]->preDecompressPage();
+    }
+  }
+}
+
 void ParquetData::enqueueRowGroup(
     uint32_t index,
     dwio::common::BufferedInput& input) {
@@ -107,19 +117,42 @@ void ParquetData::enqueueRowGroup(
 
   auto id = dwio::common::StreamIdentifier(type_->column);
   streams_[index] = input.enqueue({chunkReadOffset, readSize}, &id);
+  if (metaData.codec == thrift::CompressionCodec::QPL) {
+    pageReaders_.resize(rowGroups_.size());
+    pageReaders_[index] = std::make_unique<QplPageReader>(
+      std::move(streams_[index]),
+      pool_,
+      type_,
+      metaData.codec,
+      metaData.total_compressed_size);
+  }
 }
 
 dwio::common::PositionProvider ParquetData::seekToRowGroup(uint32_t index) {
   static std::vector<uint64_t> empty;
   VELOX_CHECK_LT(index, streams_.size());
-  VELOX_CHECK(streams_[index], "Stream not enqueued for column");
+  // VELOX_CHECK(streams_[index], "Stream not enqueued for column");
   auto& metadata = rowGroups_[index].columns[type_->column].meta_data;
-  reader_ = std::make_unique<PageReader>(
-      std::move(streams_[index]),
-      pool_,
-      type_,
-      metadata.codec,
-      metadata.total_compressed_size);
+  if (metadata.codec == thrift::CompressionCodec::QPL) {
+    if (pageReaders_[index] == nullptr) {
+      pageReaders_.resize(rowGroups_.size());
+      pageReaders_[index] = std::make_unique<QplPageReader>(
+        std::move(streams_[index]),
+        pool_,
+        type_,
+        metadata.codec,
+        metadata.total_compressed_size);
+    }
+    qplReader_ = std::move(pageReaders_[index]);
+    // qplReader_->preDecompressPage();
+  } else {
+    reader_ = std::make_unique<PageReader>(
+        std::move(streams_[index]),
+        pool_,
+        type_,
+        metadata.codec,
+        metadata.total_compressed_size);
+  }
   return dwio::common::PositionProvider(empty);
 }
 
