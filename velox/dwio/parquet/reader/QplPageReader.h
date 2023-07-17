@@ -26,7 +26,9 @@
 #include "velox/dwio/parquet/reader/StringDecoder.h"
 #include "velox/dwio/parquet/thrift/ParquetThriftTypes.h"
 #include "velox/vector/BaseVector.h"
+#include "velox/dwio/common/QplJobPool.h"
 
+#ifdef VELOX_ENABLE_QPL
 namespace facebook::velox::parquet {
 
 /// Manages access to pages inside a ColumnChunk. Interprets page headers and
@@ -157,7 +159,7 @@ class QplPageReader {
   const uint64_t* FOLLY_NULLABLE readNulls(int32_t numRows, BufferPtr& buffer);
 
   void prepareDict(const thrift::PageHeader& pageHeader, bool job_success);
-  void prepareData(const thrift::PageHeader& pageHeader, int64_t row, bool job_success);
+  bool prepareData(const thrift::PageHeader& pageHeader, int64_t row, bool job_success);
 
   // Skips the define decoder, if any, for 'numValues' top level
   // rows. Returns the number of non-nulls skipped. The range is the
@@ -591,3 +593,5 @@ void QplPageReader::readWithVisitor(Visitor& visitor) {
 }
 
 } // namespace facebook::velox::parquet
+
+#endif

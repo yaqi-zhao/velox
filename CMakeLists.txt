@@ -509,5 +509,9 @@ if("${TREAT_WARNINGS_AS_ERRORS}")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
 endif()
 
+#if(NOT CMAKE_CXX_FLAGS MATCHES "-fsanitize=address")
+#   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address")
+# endif()
+
 add_subdirectory(third_party)
 add_subdirectory(velox)

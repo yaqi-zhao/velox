@@ -30,6 +30,7 @@ private:
   qpl_compression_levels compression_level_;
   qpl_job *job_;
   int idx_;
+  static constexpr auto RETRY_TIMES = 100;
   
 };
 }

@@ -22,10 +22,9 @@
 namespace facebook::velox::exec::test {
 
 namespace {
+
 int64_t toDate(std::string_view stringDate) {
-  Date date;
-  parseTo(stringDate, date);
-  return date.days();
+  return DATE()->toDays(stringDate);
 }
 
 /// DWRF does not support Date type and Varchar is used.
@@ -179,7 +178,7 @@ SsbPlan SsbQueryBuilder::getQ31Plan() const {
                   .project({"lo_extendedprice"})
                   .partialAggregation({}, {"count(lo_extendedprice)"})
                   .finalAggregation()
-                  .localPartition({})
+                  .localPartition({std::vector<std::string>{}})
                   .planNode();
 
   SsbPlan context;
@@ -213,7 +212,7 @@ SsbPlan SsbQueryBuilder::getQ30Plan() const {
                   // .filter("(lo_orderkey> 300)")
                   .partialAggregation({}, {"count(lo_orderdate)"})
                   .finalAggregation()
-                  .localPartition({})
+                  .localPartition({std::vector<std::string>{}})
                   .planNode();
 
   SsbPlan context;
@@ -254,7 +253,7 @@ SsbPlan SsbQueryBuilder::getQ1Plan() const {
                     .project({"lo_extendedprice * lo_discount AS part_revenue", "lo_orderdate", "lo_discount", "lo_orderkey"})
                     .filter("(lo_discount between 1 and 3)  AND (lo_orderdate > '1993-01-01'::DATE) AND (lo_orderdate < '1993-12-31'::DATE)")
                     .partialAggregation({},{"sum(part_revenue) as revenue"})
-                    .localPartition({})
+                    .localPartition({std::vector<std::string>{}})
                     .finalAggregation()
                     .planNode();
 
@@ -295,7 +294,7 @@ SsbPlan SsbQueryBuilder::getQ2Plan() const {
                     .project({"lo_extendedprice * lo_discount AS part_revenue", "lo_discount", "lo_orderdate", "lo_quantity"})
                     .filter("(lo_discount between 4 and 6) AND (lo_quantity between 26 and 35) AND (lo_orderdate > '1994-04-01'::DATE) AND (lo_orderdate < '1994-04-30'::DATE)")
                     .partialAggregation({},{"sum(part_revenue) as revenue"})
-                    .localPartition({})
+                    .localPartition({std::vector<std::string>{}})
                     .finalAggregation()
                     .planNode();
 
@@ -339,7 +338,7 @@ SsbPlan SsbQueryBuilder::getQ3Plan() const {
                     .project({"lo_extendedprice * lo_discount AS part_revenue", "lo_orderdate", "lo_quantity" ,"lo_discount"})
                     .filter("(lo_discount between 5 and 7) AND (lo_quantity between 26 and 35) AND (lo_orderdate > '1994-01-01'::DATE) AND (lo_orderdate < '1994-12-30'::DATE)")
                     .partialAggregation({},{"sum(part_revenue) as revenue"})
-                    .localPartition({})
+                    .localPartition({std::vector<std::string>{}})
                     .finalAggregation()
                     .planNode();
 
@@ -392,7 +391,7 @@ SsbPlan SsbQueryBuilder::getQ4Plan() const {
                     .project({"lo_revenue", "p_brand", "p_category", "s_region"})
                     .filter("(p_category = 12) AND (s_region = 0)")
                     .partialAggregation({"p_brand"},{"sum(lo_revenue) as revenue"})
-                    .localPartition({})
+                    .localPartition({std::vector<std::string>{}})
                     .finalAggregation()
                     .orderBy({"p_brand"}, false)
                     .planNode();
@@ -446,7 +445,7 @@ SsbPlan SsbQueryBuilder::getQ5Plan() const {
                     .filter("(p_brand >= 'Brand#40') AND (p_brand <= 'Brand#45') AND (s_region = 1)")
                     .project({"lo_revenue", "lo_orderyear", "p_brand", "s_region"})
                     .partialAggregation({"lo_orderyear", "p_brand"},{"sum(lo_revenue) as revenue"})
-                    .localPartition({})
+                    .localPartition({std::vector<std::string>{}})
                     .finalAggregation()
                     .orderBy({"lo_orderyear", "p_brand"}, false)
                     .planNode();
@@ -499,7 +498,7 @@ SsbPlan SsbQueryBuilder::getQ6Plan() const {
                     .filter("(p_brand = 'Brand#55') AND (s_region = 2)")
                     .project({"lo_revenue", "lo_orderyear", "p_brand", "s_region"})
                     .partialAggregation({"lo_orderyear", "p_brand"},{"sum(lo_revenue) as revenue"})
-                    .localPartition({})
+                    .localPartition({std::vector<std::string>{}})
                     .finalAggregation()
                     .orderBy({"lo_orderyear", "p_brand"}, false)
                     .planNode();
@@ -557,7 +556,7 @@ SsbPlan SsbQueryBuilder::getQ7Plan() const {
                     .project({"lo_revenue", "lo_orderyear", "c_nation", "s_nation", "c_region", "s_region"})
                     .filter("(c_region = 1) AND (s_region = 1) AND (lo_orderyear between 1992 and 1997)")
                     .partialAggregation({"c_nation", "s_nation", "lo_orderyear"},{"sum(lo_revenue) as revenue"})
-                    .localPartition({})
+                    .localPartition({std::vector<std::string>{}})
                     .finalAggregation()
                     .orderBy({"lo_orderyear", "revenue"}, false)
                     .planNode();
@@ -615,7 +614,7 @@ SsbPlan SsbQueryBuilder::getQ8Plan() const {
                     .project({"lo_revenue", "lo_orderyear", "c_city", "s_city", "s_nation", "c_nation"})
                     .filter("(c_nation = 3) AND (s_nation = 3) AND (lo_orderyear between 1992 and 1997)")
                     .partialAggregation({"c_city", "s_city", "lo_orderyear"},{"sum(lo_revenue) as revenue"})
-                    .localPartition({})
+                    .localPartition({std::vector<std::string>{}})
                     .finalAggregation()
                     .orderBy({"lo_orderyear", "revenue"}, false)
                     .planNode();
@@ -673,7 +672,7 @@ SsbPlan SsbQueryBuilder::getQ9Plan() const {
                     .project({"lo_revenue", "lo_orderyear", "c_city", "s_city"})
                     .filter("((c_city = 111) OR (c_city = 110)) AND ((s_city = 111) OR (s_city = 110)) AND (lo_orderyear between 1992 and 1997)")
                     .partialAggregation({"c_city", "s_city", "lo_orderyear"},{"sum(lo_revenue) as revenue"})
-                    .localPartition({})
+                    .localPartition({std::vector<std::string>{}})
                     .finalAggregation()
                     .orderBy({"lo_orderyear", "revenue"}, false)
                     .planNode();
@@ -733,7 +732,7 @@ SsbPlan SsbQueryBuilder::getQ10Plan() const {
                     .project({"lo_revenue", "lo_orderyear", "lo_orderdate", "c_city", "s_city"})
                     .filter("(c_city = 111 OR c_city = 110) AND (s_city = 111 OR s_city = 110) AND (lo_orderdate > '1997-12-01'::DATE) AND (lo_orderdate < '1997-12-31'::DATE)")
                     .partialAggregation({"c_city", "s_city", "lo_orderyear"},{"sum(lo_revenue) as revenue"})
-                    .localPartition({})
+                    .localPartition({std::vector<std::string>{}})
                     .finalAggregation()
                     .orderBy({"lo_orderyear", "revenue"}, false)
                     .planNode();
@@ -789,7 +788,7 @@ SsbPlan SsbQueryBuilder::getQ11Plan() const {
                     .filter("(c_region = 3) AND (s_region = 3) AND (p_mfgr = 'Manufacturer#1' OR p_mfgr = 'Manufacturer#2')")
                     .project({"lo_orderyear", "(lo_revenue - lo_supplycost) as profit", "c_nation"})
                     .partialAggregation({"lo_orderyear", "c_nation"},{"sum(profit) as l_profit"})
-                    .localPartition({})
+                    .localPartition({std::vector<std::string>{}})
                     .finalAggregation()
                     .orderBy({"lo_orderyear", "c_nation"}, false)
                     .planNode();
@@ -848,7 +847,7 @@ SsbPlan SsbQueryBuilder::getQ12Plan() const {
                     .project({"c_region", "s_region", "p_mfgr", "lo_orderyear", "s_nation", "p_category", "(lo_revenue - lo_supplycost) as l_profit"})
                     .filter("(c_region = 2) AND (s_region = 2) AND (p_mfgr = 'Manufacturer#1' OR p_mfgr = 'Manufacturer#2') AND (lo_orderyear = 1997 OR lo_orderyear = 1998)")
                     .partialAggregation({"lo_orderyear", "s_nation", "p_category"},{"sum(l_profit) as profit"})
-                    .localPartition({})
+                    .localPartition({std::vector<std::string>{}})
                     .finalAggregation()
                     .orderBy({"lo_orderyear", "s_nation", "p_category"}, false)
                     .planNode();
@@ -906,7 +905,7 @@ SsbPlan SsbQueryBuilder::getQ13Plan() const {
                     .project({"p_category", "lo_orderyear", "s_city", "p_brand", "s_nation", "(lo_revenue - lo_supplycost) as l_profit"})
                     .filter("(s_nation = 18) AND (lo_orderyear = 1997 OR lo_orderyear = 1998) AND (p_category = 14)")
                     .partialAggregation({"lo_orderyear", "s_city", "p_brand"},{"sum(l_profit) as profit"})
-                    .localPartition({})
+                    .localPartition({std::vector<std::string>{}})
                     .finalAggregation()
                     .orderBy({"lo_orderyear", "s_city", "p_brand"}, false)
                     .planNode();

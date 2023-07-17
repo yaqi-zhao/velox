@@ -75,9 +75,12 @@ class ParquetData : public dwio::common::FormatData {
   // Reads null flags for 'numValues' next top level rows. The first 'numValues'
   // bits of 'nulls' are set and the reader is advanced by numValues'.
   void readNullsOnly(int32_t numValues, BufferPtr& nulls) {
+#ifdef VELOX_ENABLE_QPL    
     if (qplReader_ != nullptr) {
       qplReader_->readNullsOnly(numValues, nulls);
-    } else {
+    } else 
+#endif    
+    {
       reader_->readNullsOnly(numValues, nulls);
     }
   }
@@ -141,9 +144,12 @@ class ParquetData : public dwio::common::FormatData {
     // 'nullsOnly' set and is responsible for reading however many nulls or
     // pages it takes to skip 'numValues' top level rows.
     if (nullsOnly) {
+#ifdef VELOX_ENABLE_QPL      
       if (qplReader_ != nullptr) {
         qplReader_->skipNullsOnly(numValues);
-      } else {
+      } else 
+#endif      
+      {
         reader_->skipNullsOnly(numValues);
       }
     }
@@ -155,9 +161,12 @@ class ParquetData : public dwio::common::FormatData {
   }
 
   uint64_t skip(uint64_t numRows) override {
+#ifdef VELOX_ENABLE_QPL    
     if (qplReader_ != nullptr) {
       qplReader_->skip(numRows);
-    } else {
+    } else 
+#endif
+    {
       reader_->skip(numRows);
     }
     return numRows;
@@ -167,33 +176,45 @@ class ParquetData : public dwio::common::FormatData {
   /// PageReader::readWithVisitor().
   template <typename Visitor>
   void readWithVisitor(Visitor visitor) {
+#ifdef VELOX_ENABLE_QPL    
     if (qplReader_ != nullptr) {
       qplReader_->readWithVisitor(visitor);
-    } else {
+    } else 
+#endif    
+    {
       reader_->readWithVisitor(visitor);
     }
   }
 
   const VectorPtr& dictionaryValues(const TypePtr& type) {
+#ifdef VELOX_ENABLE_QPL    
     if (qplReader_ != nullptr) {
       return qplReader_->dictionaryValues(type);
-    } else {
+    } else 
+#endif    
+    {
       return reader_->dictionaryValues(type);
     }
   }
 
   void clearDictionary() {
+#ifdef VELOX_ENABLE_QPL    
     if (qplReader_ != nullptr) {
       qplReader_->clearDictionary();
-    } else {
+    } else 
+#endif    
+    {
       reader_->clearDictionary();
     }
   }
 
   bool hasDictionary() const {
+#ifdef VELOX_ENABLE_QPL    
     if (qplReader_ != nullptr) {
-      qplReader_->isDictionary();
-    } else {
+      return qplReader_->isDictionary();
+    } else 
+#endif    
+    {
       return reader_->isDictionary();
     }
   }
@@ -214,13 +235,14 @@ class ParquetData : public dwio::common::FormatData {
   // Streams for this column in each of 'rowGroups_'. Will be created on or
   // ahead of first use, not at construction.
   std::vector<std::unique_ptr<dwio::common::SeekableInputStream>> streams_;
-  // std::vector<std::unique_ptr<QplPageReader>> pageReaders_;
-
+#ifdef VELOX_ENABLE_QPL  
+  std::vector<std::unique_ptr<QplPageReader>> pageReaders_;
+  std::unique_ptr<QplPageReader> qplReader_ = nullptr;
+#endif
   const uint32_t maxDefine_;
   const uint32_t maxRepeat_;
   int64_t rowsInRowGroup_;
   std::unique_ptr<PageReader> reader_;
-  std::unique_ptr<QplPageReader> qplReader_ = nullptr;
   uint32_t current_index;
   
 

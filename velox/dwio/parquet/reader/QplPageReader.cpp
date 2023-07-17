@@ -20,19 +20,22 @@
 #include "velox/dwio/parquet/reader/NestedStructureDecoder.h"
 #include "velox/dwio/parquet/thrift/ThriftTransport.h"
 #include "velox/vector/FlatVector.h"
-#include "velox/dwio/common/QplJobPool.h"
-
 #include <snappy.h>
 #include <thrift/protocol/TCompactProtocol.h> //@manual
 #include <zlib.h>
 #include <zstd.h>
 #include "compression_qpl.h"
 
+#ifdef VELOX_ENABLE_QPL
 namespace facebook::velox::parquet {
 
 using thrift::Encoding;
 using thrift::PageHeader;
 
+static inline void print_job(qpl_job* job) {
+  std::cout << "thread id: " << std::this_thread::get_id() << ",  next_in_ptr: " << static_cast<const void *>(job->next_in_ptr) \
+  << ", next_out_ptr: " << static_cast<const void *>(job->next_out_ptr) << ", available_in: " << job->available_in << ",job->available_out: " << job->available_out << std::endl;
+}
 
 void QplPageReader::preDecompressPage() {
   // return;
@@ -78,7 +81,15 @@ void QplPageReader::seekToPage(int64_t row) {
   }
   if (data_qpl_job_id > 0) {
     bool job_success = waitQplJob(data_qpl_job_id);
-    prepareData(dataPageHeader_, row, job_success);
+    bool result = prepareData(dataPageHeader_, row, job_success);
+    if (!result) {
+      LOG(WARNING) << "Decompress w/IAA error, try again with software.";
+      pre_decompress_data = false;
+      result = prepareData(dataPageHeader_, row, job_success);
+      if (!result) {
+        VELOX_FAIL("Decomrpess fail!");
+      }
+    }
     data_qpl_job_id = 0;
     has_qpl = true;
   }
@@ -522,55 +533,63 @@ void QplPageReader::prepareDict(const thrift::PageHeader& pageHeader, bool job_s
   }    
 }
 
-void QplPageReader::prepareData(const thrift::PageHeader& pageHeader, int64_t row, bool job_success) {
+bool QplPageReader::prepareData(const thrift::PageHeader& pageHeader, int64_t row, bool job_success) {
   if (!pre_decompress_data || !job_success) {
-      dataPageData_ = uncompressData(
+      pageData_ = uncompressData(
       dataPageData_,
       pageHeader.compressed_page_size,
       pageHeader.uncompressed_page_size);    
   } else {
-    dataPageData_ = uncompressedDataV1Data_->as<char>();
+    pageData_ = uncompressedDataV1Data_->as<char>();
   }
   numRepDefsInPage_ = pageHeader.data_page_header.num_values;
   setPageRowInfo(row == kRepDefOnly);
 
 
-  auto pageEnd = dataPageData_ + pageHeader.uncompressed_page_size;
+  auto pageEnd = pageData_ + pageHeader.uncompressed_page_size;
   if (maxRepeat_ > 0) {
-    uint32_t repeatLength = readField<int32_t>(dataPageData_);
+    uint32_t repeatLength = readField<int32_t>(pageData_);
     repeatDecoder_ = std::make_unique<arrow::util::RleDecoder>(
-        reinterpret_cast<const uint8_t*>(dataPageData_),
+        reinterpret_cast<const uint8_t*>(pageData_),
         repeatLength,
         arrow::bit_util::NumRequiredBits(maxRepeat_));
 
-    dataPageData_ += repeatLength;
+    pageData_ += repeatLength;
   }
 
   if (maxDefine_ > 0) {
-    auto defineLength = readField<uint32_t>(dataPageData_);
+    auto defineLength = readField<uint32_t>(pageData_);
     if (maxDefine_ == 1) {
       defineDecoder_ = std::make_unique<RleBpDecoder>(
-          dataPageData_,
-          dataPageData_ + defineLength,
+          pageData_,
+          pageData_ + defineLength,
           arrow::bit_util::NumRequiredBits(maxDefine_));
     } else {
       wideDefineDecoder_ = std::make_unique<arrow::util::RleDecoder>(
-          reinterpret_cast<const uint8_t*>(dataPageData_),
+          reinterpret_cast<const uint8_t*>(pageData_),
           defineLength,
           arrow::bit_util::NumRequiredBits(maxDefine_));
     }
-    dataPageData_ += defineLength;
+    pageData_ += defineLength;
   }
-  encodedDataSize_ = pageEnd - dataPageData_;
+  encodedDataSize_ = pageEnd - pageData_;
+  if (encodedDataSize_ > pageHeader.uncompressed_page_size) {
+    return false;
+  }
 
   encoding_ = pageHeader.data_page_header.encoding;
   if (!hasChunkRepDefs_ && (numRowsInPage_ == kRowsUnknown || maxDefine_ > 1)) {
     readPageDefLevels();
   }
-  pageData_ = dataPageData_;
+  // pageData_ = dataPageData_;
   if (row != kRepDefOnly) {
+  // if (encodedDataSize_ > 10947952) {
+  //   std::cout << "encodedDataSize_: " << encodedDataSize_ << ", pageHeader.uncompressed_page_size: " << pageHeader.uncompressed_page_size << ", datapageheader " << dataPageHeader_.uncompressed_page_size;
+  //   std::cout << ", defineLength: " << defineLength << ", job_success: " << job_success << std::endl;
+  // }
     makeDecoder();
   }
+  return true;
 }
 void QplPageReader::prepareDataPageV1(const PageHeader& pageHeader, int64_t row) {
   VELOX_CHECK(
@@ -989,8 +1008,8 @@ void QplPageReader::makeDecoder() {
   switch (encoding_) {
     case Encoding::RLE_DICTIONARY:
     case Encoding::PLAIN_DICTIONARY:
-      if (pageData_ == nullptr) {
-        std::cout << "pageData_ is nullptr" << std::endl;
+      if (encodedDataSize_ > dataPageHeader_.uncompressed_page_size) {
+        std::cout << "encodedDataSize_: " << encodedDataSize_ << ", pre_decompress_data: " << pre_decompress_data << true <<  ", dataPageHeader_: " << dataPageHeader_.uncompressed_page_size << std::endl;
       }
       dictionaryIdDecoder_ = std::make_unique<RleBpDataDecoder>(
           pageData_ + 1, pageData_ + encodedDataSize_, pageData_[0]);
@@ -1289,6 +1308,7 @@ bool QplPageReader::waitQplJob(uint32_t job_id) {
   qpl_fini_job(job);
   qpl_job_pool.ReleaseJob(job_id);
   if (status != QPL_STS_OK) {
+    // std::cout << "qpl job fail, status: " << status << std::endl;
       return false;   
   }
   return true;
@@ -1311,3 +1331,5 @@ QplPageReader::~QplPageReader() {
 }
 
 } // namespace facebook::velox::parquet
+
+#endif

@@ -185,7 +185,6 @@ uint32_t Qplcodec::DecompressAsync(int64_t input_length, const uint8_t* input,
     uint32_t job_id = 0;
     qpl_job* job = qpl_job_pool.AcquireDeflateJob(job_id);
     if (job == nullptr) {
-        // std::cout << "cannot get qpl job" << std::endl;
         return qpl_job_pool.MAX_JOB_NUMBER; // Invalid job id to illustrate the failed decompress job.
     }
     job->op = qpl_op_decompress;
@@ -197,13 +196,10 @@ uint32_t Qplcodec::DecompressAsync(int64_t input_length, const uint8_t* input,
     if (isGzip) {
       job->flags |= QPL_FLAG_GZIP_MODE;
     }
-    // job->numa_id = 1;
-
-    //decompression
-    // std::cout <<"id: " << std::this_thread::get_id()  << ", before submit , input: " << static_cast<const void *>(job->next_in_ptr) <<  std::endl;
+    
     qpl_status status = qpl_submit_job(job);
     uint32_t check_time = 10;
-    while (status == QPL_STS_QUEUES_ARE_BUSY_ERR && check_time < UINT32_MAX) {
+    while (status == QPL_STS_QUEUES_ARE_BUSY_ERR && check_time < RETRY_TIMES) {
       qpl_job_pool.ReleaseJob(job_id);
       job = qpl_job_pool.AcquireDeflateJob(job_id);
       if (job == nullptr) {
@@ -218,10 +214,10 @@ uint32_t Qplcodec::DecompressAsync(int64_t input_length, const uint8_t* input,
       if (isGzip) {
         job->flags |= QPL_FLAG_GZIP_MODE;
       }
+
       _umwait(1, __rdtsc() + 1000);
       check_time++;
       status = qpl_submit_job(job);
-        // std::cout << "id: " <<std::this_thread::get_id() << ", submit decompress job error : " << ", status: " << (int)status << ", input: " << static_cast<const void *>(job->next_in_ptr) <<  std::endl;
     }
     if (status != QPL_STS_OK) {
         qpl_job_pool.ReleaseJob(job_id);
