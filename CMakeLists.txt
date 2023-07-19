@@ -86,6 +86,7 @@ option(
   VELOX_ENABLE_INT64_BUILD_PARTITION_BOUND
   "make buildPartitionBounds_ a vector int64 instead of int32 to avoid integer overflow when the hashtable has billions of records"
   OFF)
+option(VELOX_ENABLE_QPL "Enable Intel QPL support" OFF)
 
 if(${VELOX_BUILD_MINIMAL})
   # Enable and disable components for velox base build
@@ -209,6 +210,11 @@ if(VELOX_ENABLE_PARQUET)
   # Native Parquet reader requires Apache Thrift and Arrow Parquet writer, which
   # are included in Arrow.
   set(VELOX_ENABLE_ARROW ON)
+endif()
+
+if(VELOX_ENABLE_QPL)
+  add_definitions(-DVELOX_ENABLE_QPL)
+  message(STATUS "add VELOX_ENABLE_QPL")
 endif()
 
 # Turn on Codegen only for Clang and non Mac systems.
