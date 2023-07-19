@@ -42,6 +42,7 @@ add_library(
   IoStatistics.cpp
   MetadataFilter.cpp
   Options.cpp
+  QplJobPool.cpp
   Range.cpp
   Reader.cpp
   ReaderFactory.cpp
@@ -56,6 +57,13 @@ add_library(
   TypeWithId.cpp
   WriterFactory.cpp)
 
+set(QPL_STATIC_LINK_LIBS ${QPL_STATIC_LINK_LIBS})
+if(VELOX_ENABLE_QPL)
+  list(APPEND QPL_STATIC_LINK_LIBS qpl::qpl)
+endif()
+
+message(STATUS "QPL_STATIC_LINK_LIBS: ${QPL_STATIC_LINK_LIBS}")
+
 target_link_libraries(
   velox_dwio_common
   velox_buffer
@@ -68,4 +76,5 @@ target_link_libraries(
   velox_memory
   Boost::regex
   Folly::folly
+  ${QPL_STATIC_LINK_LIBS}
   glog::glog)

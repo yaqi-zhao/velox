@@ -20,12 +20,29 @@ add_library(
   PageReader.cpp
   ParquetColumnReader.cpp
   ParquetData.cpp
+  QplPageReader.cpp
   RepeatedColumnReader.cpp
   RleBpDecoder.cpp
   Statistics.cpp
   StructColumnReader.cpp
   StringColumnReader.cpp)
 
+set_source_files_properties(
+  NestedStructureDecoder.cpp
+  ParquetReader.cpp
+  ParquetTypeWithId.cpp
+  PageReader.cpp
+  ParquetColumnReader.cpp
+  ParquetData.cpp
+  RepeatedColumnReader.cpp
+  QplPageReader.cpp
+  RleBpDecoder.cpp
+  Statistics.cpp
+  StructColumnReader.cpp
+  StringColumnReader.cpp
+  DeflateRleBpDecoder.h
+    PROPERTIES COMPILE_FLAGS "-mwaitpkg")
+    
 target_link_libraries(
   velox_dwio_native_parquet_reader
   velox_dwio_parquet_thrift
