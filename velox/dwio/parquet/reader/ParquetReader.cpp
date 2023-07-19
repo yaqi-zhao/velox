@@ -474,30 +474,21 @@ void ReaderBase::scheduleRowGroups(
       currentGroup + 1 < rowGroupIds.size() ? rowGroupIds[currentGroup + 1] : 0;
   auto input = inputs_[thisGroup].get();
   if (!input) {
-    if (preloadFile_) {
-      // Read data from buffer directly.
-      reader.enqueueRowGroup(thisGroup, *input_);
-      inputs_[thisGroup] = input_;
-    } else {
-      auto newInput = input_->clone();
-      reader.enqueueRowGroup(thisGroup, *newInput);
-      newInput->load(dwio::common::LogType::STRIPE);
-      inputs_[thisGroup] = std::move(newInput);
-    }
+    auto newInput = input_->clone();
+    reader.enqueueRowGroup(thisGroup, *newInput);
+    newInput->load(dwio::common::LogType::STRIPE);
+    inputs_[thisGroup] = std::move(newInput);
+    reader.preDecompRowGroup(thisGroup);
   }
   for (auto counter = 0; counter < FLAGS_parquet_prefetch_rowgroups;
        ++counter) {
     if (nextGroup) {
-      if (inputs_.count(nextGroup) == 0) {
-        if (preloadFile_) {
-          reader.enqueueRowGroup(nextGroup, *input_);
-          inputs_[nextGroup] = input_;
-        } else {
-          auto newInput = input_->clone();
-          reader.enqueueRowGroup(nextGroup, *newInput);
-          newInput->load(dwio::common::LogType::STRIPE);
-          inputs_[nextGroup] = std::move(newInput);
-        }
+      if (inputs_.count(nextGroup) != 0) {
+        auto newInput = input_->clone();
+        reader.enqueueRowGroup(nextGroup, *newInput);
+        newInput->load(dwio::common::LogType::STRIPE);
+        inputs_[nextGroup] = std::move(newInput);
+        reader.preDecompRowGroup(nextGroup);
       }
     } else {
       break;
