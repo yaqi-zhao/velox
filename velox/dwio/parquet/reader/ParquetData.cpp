@@ -82,6 +82,27 @@ bool ParquetData::rowGroupMatches(
   return true;
 }
 
+void ParquetData::preDecompRowGroup(uint32_t index) {
+#ifdef VELOX_ENABLE_QPL
+  if (!dwio::common::QplJobHWPool::GetInstance().job_ready()) {
+    std::cout << "job not readdy" << std::endl;
+    return;
+  }
+  auto& chunk = rowGroups_[index].columns[type_->column];
+  auto& metaData = chunk.meta_data;
+  if (metaData.codec == thrift::CompressionCodec::GZIP) {
+    pageReaders_.resize(rowGroups_.size());
+    pageReaders_[index] = std::make_unique<QplPageReader>(
+      std::move(streams_[index]),
+      pool_,
+      type_,
+      metaData.codec,
+      metaData.total_compressed_size);    
+      pageReaders_[index]->preDecompressPage();
+  }
+#endif  
+}
+
 void ParquetData::enqueueRowGroup(
     uint32_t index,
     dwio::common::BufferedInput& input) {
@@ -112,14 +133,21 @@ void ParquetData::enqueueRowGroup(
 dwio::common::PositionProvider ParquetData::seekToRowGroup(uint32_t index) {
   static std::vector<uint64_t> empty;
   VELOX_CHECK_LT(index, streams_.size());
-  VELOX_CHECK(streams_[index], "Stream not enqueued for column");
   auto& metadata = rowGroups_[index].columns[type_->column].meta_data;
-  reader_ = std::make_unique<PageReader>(
-      std::move(streams_[index]),
-      pool_,
-      type_,
-      metadata.codec,
-      metadata.total_compressed_size);
+#ifdef VELOX_ENABLE_QPL    
+  if (metadata.codec == thrift::CompressionCodec::GZIP && dwio::common::QplJobHWPool::GetInstance().job_ready() && pageReaders_[index] != nullptr) {
+    qplReader_ = std::move(pageReaders_[index]);
+  } else 
+#endif
+  {
+    VELOX_CHECK(streams_[index], "Stream not enqueued for column");
+    reader_ = std::make_unique<PageReader>(
+        std::move(streams_[index]),
+        pool_,
+        type_,
+        metadata.codec,
+        metadata.total_compressed_size);
+  }
   return dwio::common::PositionProvider(empty);
 }
 
