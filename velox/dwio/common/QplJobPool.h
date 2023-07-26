@@ -35,7 +35,8 @@ namespace facebook::velox::dwio::common {
 class QplJobHWPool {
  public:
   static QplJobHWPool& GetInstance();
-
+  QplJobHWPool();
+  ~QplJobHWPool();
   /// Acquire QPL job
   ///
   /// @param job_id QPL job id, used when release QPL job
@@ -57,8 +58,7 @@ class QplJobHWPool {
   static constexpr auto MAX_JOB_NUMBER = 1024;
   
  private:
-  QplJobHWPool();
-  ~QplJobHWPool();
+
   bool tryLockJob(uint32_t index);
   bool AllocateQPLJob();
 

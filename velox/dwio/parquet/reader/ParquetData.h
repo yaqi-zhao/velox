@@ -55,7 +55,7 @@ class ParquetData : public dwio::common::FormatData {
 
   /// Prepares to read data for 'index'th row group.
   void enqueueRowGroup(uint32_t index, dwio::common::BufferedInput& input);
-  void preDecompRowGroup(uint32_t index);
+  bool preDecompRowGroup(uint32_t index);
 
   /// Positions 'this' at 'index'th row group. enqueueRowGroup must be called
   /// first. The returned PositionProvider is empty and should not be used.
@@ -238,6 +238,7 @@ class ParquetData : public dwio::common::FormatData {
 #ifdef VELOX_ENABLE_QPL  
   std::vector<std::unique_ptr<QplPageReader>> pageReaders_;
   std::unique_ptr<QplPageReader> qplReader_ = nullptr;
+  bool needPreDecomp = true;
 #endif
   const uint32_t maxDefine_;
   const uint32_t maxRepeat_;

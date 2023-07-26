@@ -114,10 +114,19 @@ if(VELOX_ENABLE_QPL)
 
   ExternalProject_Add(qpl_ep
                       ${EP_LOG_OPTIONS}
-                      URL https://github.com/intel/qpl/archive/refs/tags/v1.2.0.tar.gz
+                      GIT_REPOSITORY https://github.com/intel-innersource/libraries.performance.accelerators.qpl.qpl-library.git
+                      GIT_TAG origin/dev/mzhukova/zlib-support-p1
+                      GIT_CONFIG  https.sslVerify=false
                       BUILD_BYPRODUCTS "${QPL_STATIC_LIB}"
                       CMAKE_ARGS ${QPL_CMAKE_ARGS}
                      )
+
+#  ExternalProject_Add(qpl_ep
+#                      ${EP_LOG_OPTIONS}
+#                      URL https://github.com/intel/qpl/archive/refs/tags/v1.2.0.tar.gz
+#                      BUILD_BYPRODUCTS "${QPL_STATIC_LIB}"
+#                      CMAKE_ARGS ${QPL_CMAKE_ARGS}
+#                     )
 
   file(MAKE_DIRECTORY "${QPL_PREFIX}/include")
 

@@ -126,8 +126,8 @@ class ListColumnReader : public dwio::common::SelectiveListColumnReader {
 
   void enqueueRowGroup(uint32_t index, dwio::common::BufferedInput& input);
 
-  void preDecompRowGroup(uint32_t index) {
-    return;
+  bool preDecompRowGroup(uint32_t index) {
+    return true;
   }
   void read(
       vector_size_t offset,

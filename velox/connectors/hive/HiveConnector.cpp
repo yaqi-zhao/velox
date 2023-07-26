@@ -35,6 +35,9 @@
 #include "velox/dwio/parquet/RegisterParquetReader.h" // @manual
 #include "velox/dwio/parquet/RegisterParquetWriter.h" // @manual
 #endif
+#ifdef VELOX_ENABLE_QPL
+#include "velox/dwio/common/QplJobPool.h"
+#endif
 #include "velox/expression/FieldReference.h"
 
 #include <boost/lexical_cast.hpp>
@@ -101,6 +104,9 @@ void HiveConnectorFactory::initialize() {
 #endif
 #ifdef VELOX_ENABLE_GCS
     filesystems::registerGCSFileSystem();
+#endif
+#ifdef VELOX_ENABLE_QPL
+    dwio::common::QplJobHWPool::GetInstance(); // Initialize QPL Job pool
 #endif
     return true;
   }();

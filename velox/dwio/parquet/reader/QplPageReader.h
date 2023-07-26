@@ -81,10 +81,7 @@ class QplPageReader {
   
   /// Advances 'numRows' top level rows.
   void skip(int64_t numRows);
-
-  void preDecompressPage();
-  uint32_t DecompressAsync(int64_t input_length, const uint8_t* input,
-                             int64_t output_buffer_length, uint8_t* output, bool isGzip);
+  void preDecompressPage(bool& need_pre_decompress);
 
   /// Decodes repdefs for 'numTopLevelRows'. Use getLengthsAndNulls()
   /// to access the lengths and nulls for the different nesting
@@ -162,7 +159,9 @@ class QplPageReader {
 
   void prepareDict(const thrift::PageHeader& pageHeader, bool job_success);
   bool prepareData(const thrift::PageHeader& pageHeader, int64_t row, bool job_success);
-
+  uint32_t DecompressAsync(int64_t input_length, const uint8_t* input,
+                             int64_t output_buffer_length, uint8_t* output, bool isGzip);
+                             
   // Skips the define decoder, if any, for 'numValues' top level
   // rows. Returns the number of non-nulls skipped. The range is the
   // current page.
@@ -206,12 +205,11 @@ class QplPageReader {
   void prepareDictionary(const thrift::PageHeader& pageHeader);
   void makeDecoder();
 
-
   void prefetchDataPageV1(const thrift::PageHeader& pageHeader);
   void prefetchDataPageV2(const thrift::PageHeader& pageHeader);
   void prefetchDictionary(const thrift::PageHeader& pageHeader);
   bool waitQplJob(uint32_t job_id);
-
+  int getGzipWindowSize(const uint8_t *stream_ptr, uint32_t stream_size);
 
   // For a non-top level leaf, reads the defs and sets 'leafNulls_' and
   // 'numRowsInPage_' accordingly. This is used for non-top level leaves when
@@ -526,6 +524,10 @@ class QplPageReader {
 
   bool pre_decompress_dict = false;
   bool pre_decompress_data = false;
+  bool isWinSizeFit = false;
+  static constexpr uint8_t  CM_ZLIB_DEFAULT_VALUE   = 8u;
+  static constexpr uint32_t ZLIB_MIN_HEADER_SIZE    = 2u;
+  static constexpr uint32_t ZLIB_INFO_OFFSET        = 4u;
 };
 
 template <typename Visitor>

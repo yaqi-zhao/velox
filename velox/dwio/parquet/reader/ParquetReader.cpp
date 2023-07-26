@@ -44,6 +44,7 @@ ReaderBase::ReaderBase(
 
   loadFileMetaData();
   initializeSchema();
+  needPreDecomp = true;
 }
 
 void ReaderBase::loadFileMetaData() {
@@ -469,7 +470,9 @@ void ReaderBase::scheduleRowGroups(
     reader.enqueueRowGroup(thisGroup, *newInput);
     newInput->load(dwio::common::LogType::STRIPE);
     inputs_[thisGroup] = std::move(newInput);
-    reader.preDecompRowGroup(thisGroup);
+    if (needPreDecomp) {
+      needPreDecomp = reader.preDecompRowGroup(thisGroup);
+    }
   }
   for (auto counter = 0; counter < FLAGS_parquet_prefetch_rowgroups;
        ++counter) {
@@ -479,7 +482,9 @@ void ReaderBase::scheduleRowGroups(
         reader.enqueueRowGroup(nextGroup, *newInput);
         newInput->load(dwio::common::LogType::STRIPE);
         inputs_[nextGroup] = std::move(newInput);
-        reader.preDecompRowGroup(nextGroup);
+        if (needPreDecomp) {
+          needPreDecomp = reader.preDecompRowGroup(nextGroup);
+        }
       }
     } else {
       break;

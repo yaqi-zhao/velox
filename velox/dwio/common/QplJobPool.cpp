@@ -29,6 +29,8 @@ std::array<std::atomic<bool>, QplJobHWPool::MAX_JOB_NUMBER> QplJobHWPool::hw_job
 bool QplJobHWPool::iaa_job_ready = false;
 std::unique_ptr<uint8_t[]> QplJobHWPool::hw_jobs_buffer;
 
+// static QplJobHWPool pool = QplJobHWPool::GetInstance();
+
 QplJobHWPool& QplJobHWPool::GetInstance() {
   static QplJobHWPool pool;
   return pool;
@@ -36,7 +38,9 @@ QplJobHWPool& QplJobHWPool::GetInstance() {
 
 QplJobHWPool::QplJobHWPool()
 {
-  (void)AllocateQPLJob();
+  if (!iaa_job_ready) {
+    (void)AllocateQPLJob();
+  }
 }
 
 QplJobHWPool::~QplJobHWPool() {

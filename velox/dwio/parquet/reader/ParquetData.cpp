@@ -82,15 +82,17 @@ bool ParquetData::rowGroupMatches(
   return true;
 }
 
-void ParquetData::preDecompRowGroup(uint32_t index) {
+bool ParquetData::preDecompRowGroup(uint32_t index) {
 #ifdef VELOX_ENABLE_QPL
-  if (!dwio::common::QplJobHWPool::GetInstance().job_ready()) {
-    std::cout << "job not readdy" << std::endl;
-    return;
+  if (!dwio::common::QplJobHWPool::GetInstance().job_ready() || !needPreDecomp) {
+    LOG(WARNING) << "QPL Job not ready or zlib window size(" << needPreDecomp << ") is not 4KB";
+    return false;
   }
+
   auto& chunk = rowGroups_[index].columns[type_->column];
   auto& metaData = chunk.meta_data;
   if (metaData.codec == thrift::CompressionCodec::GZIP) {
+    bool isWinSizeFit;
     pageReaders_.resize(rowGroups_.size());
     pageReaders_[index] = std::make_unique<QplPageReader>(
       std::move(streams_[index]),
@@ -98,9 +100,11 @@ void ParquetData::preDecompRowGroup(uint32_t index) {
       type_,
       metaData.codec,
       metaData.total_compressed_size);    
-      pageReaders_[index]->preDecompressPage();
+      pageReaders_[index]->preDecompressPage(needPreDecomp);
   }
+  return needPreDecomp;
 #endif  
+  return false;
 }
 
 void ParquetData::enqueueRowGroup(
@@ -137,11 +141,13 @@ dwio::common::PositionProvider ParquetData::seekToRowGroup(uint32_t index) {
 #ifdef VELOX_ENABLE_QPL    
   if (metadata.codec == thrift::CompressionCodec::GZIP &&
       dwio::common::QplJobHWPool::GetInstance().job_ready() &&
-      pageReaders_[index] != nullptr) {
+      pageReaders_.size() > index && pageReaders_[index] != nullptr) {
     qplReader_ = std::move(pageReaders_[index]);
-  } else 
+    return dwio::common::PositionProvider(empty);
+  } else {
+    qplReader_ = nullptr;
+  } 
 #endif
-  {
     VELOX_CHECK(streams_[index], "Stream not enqueued for column");
     reader_ = std::make_unique<PageReader>(
         std::move(streams_[index]),
@@ -149,7 +155,6 @@ dwio::common::PositionProvider ParquetData::seekToRowGroup(uint32_t index) {
         type_,
         metadata.codec,
         metadata.total_compressed_size);
-  }
   return dwio::common::PositionProvider(empty);
 }
 

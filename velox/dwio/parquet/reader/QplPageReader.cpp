@@ -31,7 +31,7 @@ namespace facebook::velox::parquet {
 using thrift::Encoding;
 using thrift::PageHeader;
 
-void QplPageReader::preDecompressPage() {
+void QplPageReader::preDecompressPage(bool& need_pre_decompress) {
   for (;;) {
     auto dataStart = pageStart_;
     if (chunkSize_ <= pageStart_) {
@@ -57,6 +57,7 @@ void QplPageReader::preDecompressPage() {
     }
     break;
   }
+  need_pre_decompress = isWinSizeFit;
 }
 
 void QplPageReader::seekToPage(int64_t row) {
@@ -189,6 +190,17 @@ const bool FOLLY_NONNULL QplPageReader::uncompressQplData(
 
     bool isGzip = codec_ == thrift::CompressionCodec::GZIP;
 
+    if (!isWinSizeFit) {
+      // first time to check window size
+      int window_size = getGzipWindowSize((const uint8_t*)pageData, uncompressedSize);
+      if (window_size == 12) { // window size is not 4KB
+        isWinSizeFit = true;
+      } else {
+        qpl_job_id = dwio::common::QplJobHWPool::GetInstance().MAX_JOB_NUMBER;
+        return false;
+      }
+    }
+
     qpl_job_id = this->DecompressAsync(
         compressedSize,
         (const uint8_t*)pageData,
@@ -208,6 +220,7 @@ uint32_t QplPageReader::DecompressAsync(int64_t input_length, const uint8_t* inp
     uint32_t job_id = 0;
     qpl_job* job = qpl_job_pool.AcquireDeflateJob(job_id);
     if (job == nullptr) {
+        LOG(WARNING) << "cannot AcquireDeflateJob ";
         return qpl_job_pool.MAX_JOB_NUMBER; // Invalid job id to illustrate the failed decompress job.
     }
     job->op = qpl_op_decompress;
@@ -217,7 +230,7 @@ uint32_t QplPageReader::DecompressAsync(int64_t input_length, const uint8_t* inp
     job->available_out = output_buffer_length;
     job->flags = QPL_FLAG_FIRST | QPL_FLAG_LAST;
     if (isGzip) {
-      job->flags |= QPL_FLAG_GZIP_MODE;
+      job->flags |= QPL_FLAG_ZLIB_MODE;
     }
     
     qpl_status status = qpl_submit_job(job);
@@ -225,6 +238,7 @@ uint32_t QplPageReader::DecompressAsync(int64_t input_length, const uint8_t* inp
       qpl_job_pool.ReleaseJob(job_id);
       job = qpl_job_pool.AcquireDeflateJob(job_id);
       if (job == nullptr) {
+          LOG(WARNING) << "cannot acqure deflate job after QPL_STS_QUEUES_ARE_BUSY_ERR ";
           return qpl_job_pool.MAX_JOB_NUMBER; // Invalid job id to illustrate the failed decompress job.
       }
       job->op = qpl_op_decompress;
@@ -234,15 +248,14 @@ uint32_t QplPageReader::DecompressAsync(int64_t input_length, const uint8_t* inp
       job->available_out = output_buffer_length;
       job->flags = QPL_FLAG_FIRST | QPL_FLAG_LAST;
       if (isGzip) {
-        job->flags |= QPL_FLAG_GZIP_MODE;
+        job->flags |= QPL_FLAG_ZLIB_MODE;
       }
 
-      _umwait(1, __rdtsc() + 1000);
       status = qpl_submit_job(job);
     }
     if (status != QPL_STS_OK) {
         qpl_job_pool.ReleaseJob(job_id);
-        LOG(WARNING) << "cannot submit job because of QPL_STS_QUEUES_ARE_BUSY_ERR ";
+        LOG(WARNING) << "cannot submit job, error status: " << status;
         return qpl_job_pool.MAX_JOB_NUMBER; // Invalid job id to illustrate the failed decompress job.
     } else {
       return job_id;
@@ -321,6 +334,35 @@ const char* FOLLY_NONNULL QplPageReader::uncompressData(
     default:
       VELOX_FAIL("Unsupported Parquet compression type '{}'", codec_);
   }
+}
+
+/* Get the window size from zlib header(rfc1950). 
+    0   1
+    +---+---+
+    |CMF|FLG|   (more-->)
+    +---+---+
+    bits 0 to 3  CM     Compression method
+    bits 4 to 7  CINFO  Compression info
+    CM (Compression method) This identifies the compression method used in the file. 
+     CM = 8 denotes the "deflate" compression method with a window size up to 32K.
+    CINFO (Compression info) For CM = 8, CINFO is the base-2 logarithm of the LZ77 window size, 
+     minus eight (CINFO=7 indicates a 32K window size).
+*/
+int QplPageReader::getGzipWindowSize(const uint8_t *stream_ptr, uint32_t stream_size) {
+  if (stream_size < ZLIB_MIN_HEADER_SIZE) {
+      return -1;
+  }
+  const uint8_t compression_method_and_flag = *stream_ptr++;
+  const uint8_t compression_method          = compression_method_and_flag & 0xf;
+  const uint8_t compression_info            = compression_method_and_flag >> ZLIB_INFO_OFFSET;
+
+  if (CM_ZLIB_DEFAULT_VALUE != compression_method) {
+    return -1;
+  }
+  if (compression_info > 7) {
+    return -1;
+  }
+  return CM_ZLIB_DEFAULT_VALUE + compression_info;
 }
 
 void QplPageReader::setPageRowInfo(bool forRepDef) {
@@ -409,6 +451,7 @@ void QplPageReader::prefetchDictionary(const thrift::PageHeader& pageHeader) {
 
 void QplPageReader::prepareDict(const thrift::PageHeader& pageHeader, bool job_success) {
   if (!pre_decompress_dict || !job_success) {
+      LOG(WARNING) << "Decompress w/IAA error, try to uncompress dict with software.";
       dictPageData_ = uncompressData(
       dictPageData_,
       pageHeader.compressed_page_size,
@@ -556,6 +599,7 @@ void QplPageReader::prepareDict(const thrift::PageHeader& pageHeader, bool job_s
 
 bool QplPageReader::prepareData(const thrift::PageHeader& pageHeader, int64_t row, bool job_success) {
   if (!pre_decompress_data || !job_success) {
+     LOG(WARNING) << "Need to uncompress data with sw, pre_decompress_data: " << pre_decompress_data << ", job_success: " << job_success;
       pageData_ = uncompressData(
       dataPageData_,
       pageHeader.compressed_page_size,
@@ -1312,19 +1356,13 @@ bool QplPageReader::waitQplJob(uint32_t job_id) {
   }
   qpl_job* job = qpl_job_pool.GetJobById(job_id);
 
-  auto status = qpl_check_job(job);
-  uint32_t check_time = 0;
-  while (status == QPL_STS_BEING_PROCESSED && check_time < UINT32_MAX - 1)
-  {
-      _umonitor(job->next_out_ptr + job->available_out - 1);
-      _umwait(1, __rdtsc() + 8000);
-      status = qpl_check_job(job);
-      check_time++;
-  } 
-  
-  qpl_fini_job(job);
+  auto status = qpl_wait_job(job);  
   qpl_job_pool.ReleaseJob(job_id);
+  if (status == QPL_STS_BAD_DIST_ERR) {
+    isWinSizeFit = false;
+  }
   if (status != QPL_STS_OK) {
+      LOG(WARNING) << "Decompress w/IAA error, status: " << status;
       return false;   
   }
   return true;
