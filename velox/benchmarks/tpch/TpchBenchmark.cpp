@@ -23,6 +23,9 @@
 #include "velox/common/memory/MmapAllocator.h"
 #include "velox/connectors/hive/HiveConnector.h"
 #include "velox/dwio/common/Options.h"
+#ifdef VELOX_ENABLE_QPL
+#include "velox/dwio/common/QplJobPool.h"
+#endif
 #include "velox/dwio/dwrf/reader/DwrfReader.h"
 #include "velox/dwio/parquet/RegisterParquetReader.h"
 #include "velox/exec/PlanNodeStats.h"
@@ -146,6 +149,9 @@ class TpchBenchmark {
             connector::hive::HiveConnectorFactory::kHiveConnectorName)
             ->newConnector(kHiveConnectorId, nullptr, ioExecutor_.get());
     connector::registerConnector(hiveConnector);
+#ifdef VELOX_ENABLE_QPL
+    QplJobHWPool::GetInstance();
+#endif
   }
 
   std::pair<std::unique_ptr<TaskCursor>, std::vector<RowVectorPtr>> run(
