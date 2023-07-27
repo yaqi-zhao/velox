@@ -23,7 +23,9 @@
 #include "velox/type/Conversions.h"
 #include "velox/type/Type.h"
 #include "velox/type/Variant.h"
-
+#ifdef VELOX_ENABLE_QPL
+#include "velox/dwio/common/QplJobPool.h"
+#endif
 #include <boost/lexical_cast.hpp>
 
 #include <memory>
@@ -705,7 +707,11 @@ HiveConnector::HiveConnector(
           std::make_unique<SimpleLRUCache<std::string, FileHandle>>(
               FLAGS_file_handle_cache_mb << 20),
           std::make_unique<FileHandleGenerator>(std::move(properties))),
-      executor_(executor) {}
+      executor_(executor) {
+#ifdef VELOX_ENABLE_QPL
+    dwio::common::QplJobHWPool::GetInstance(); // Initialize QPL Job pool
+#endif        
+      }
 
 VELOX_REGISTER_CONNECTOR_FACTORY(std::make_shared<HiveConnectorFactory>())
 VELOX_REGISTER_CONNECTOR_FACTORY(
