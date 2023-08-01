@@ -105,7 +105,7 @@ if(VELOX_ENABLE_ARROW)
   set(VELOX_ARROW_BUILD_VERSION 8.0.0)
   set(VELOX_ARROW_BUILD_SHA256_CHECKSUM
 #      ad9a05705117c989c116bae9ac70492fe015050e1b80fb0e38fde4b5d863aaa3
-      6bbc4e7091a76bf6ceed8dbd7c69a8db9f460ad94c99d8794c8a838275fe5e7c
+      f167e036124beb91dbd9abb5570740108c391079ebc8ada3063b53a98ee43d6a
   )
   set(VELOX_ARROW_SOURCE_URL
 #      "https://archive.apache.org/dist/arrow/arrow-${VELOX_ARROW_BUILD_VERSION}/apache-arrow-${VELOX_ARROW_BUILD_VERSION}.tar.gz"  

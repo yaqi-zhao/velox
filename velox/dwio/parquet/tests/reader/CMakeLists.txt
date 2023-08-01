@@ -54,6 +54,30 @@ target_link_libraries(
   Folly::folly
   ${FOLLY_BENCHMARK})
 
+add_executable(velox_dwio_parquet_readeriaa_benchmark IAAParquetReaderBenchmark.cpp)
+target_link_libraries(
+  velox_dwio_parquet_readeriaa_benchmark
+  velox_dwio_parquet_reader
+  velox_dwio_parquet_writer
+  velox_exec_test_lib
+  velox_exec
+  velox_hive_connector
+  Folly::folly
+  ${FOLLY_BENCHMARK})
+
+add_executable(velox_dwio_parquet_transform_tool ParquetTransfer.cpp)
+target_link_libraries(
+  velox_dwio_parquet_transform_tool
+  velox_dwio_parquet_reader
+  velox_dwio_parquet_writer
+  velox_exec_test_lib
+  velox_exec
+  velox_hive_connector
+  Folly::folly
+  parquet
+  arrow
+  ${FOLLY_BENCHMARK})
+
 add_executable(velox_dwio_parquet_structure_decoder_test
                NestedStructureDecoderTest.cpp)
 add_test(

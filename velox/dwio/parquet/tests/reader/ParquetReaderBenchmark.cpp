@@ -69,10 +69,11 @@ class ParquetReaderBenchmark {
       } 
       else if (FLAGS_compression.compare("gzip") == 0) {
         auto gzip_codec_options = std::make_shared<::arrow::util::GZipCodecOptions>();
-        gzip_codec_options->window_bits = 12;
+        gzip_codec_options->window_bits = 15;
         // gzip_codec_options->compression_level = 9;
         // gzip_codec_options->gzip_format = ::arrow::util::GZipFormat::DEFLATE;
-        gzip_codec_options->gzip_format = ::arrow::util::GZipFormat::GZIP;
+        // gzip_codec_options->gzip_format = ::arrow::util::GZipFormat::GZIP;
+        gzip_codec_options->gzip_format = ::arrow::util::GZipFormat::ZLIB;
         writerProperties = ::parquet::WriterProperties::Builder()
           .compression(::parquet::Compression::GZIP)
           ->codec_options(gzip_codec_options)
@@ -130,10 +131,10 @@ class ParquetReaderBenchmark {
         // }           
       } else if (FLAGS_table_name.compare("lineitem") == 0)  {
         rowVector1 = facebook::velox::tpch::genTpchLineItem(pool_.get(),500000, 0, 10);
-        for (int i = 0; i < 12; i++) {
+        // for (int i = 0; i < 12; i++) {
           std::cout << "i: " << 0 << ", num row: " << rowVector1->size() << std::endl;
           writer_->write(rowVector1);
-        }            
+        // }            
       // } else if (FLAGS_table_name.compare("lineorder_flat") == 0) {
       //   rowVector1 = facebook::velox::tpch::genTpchLineOrderFlat(120000);
       //   for (int i = 0; i < 50; i++) {
