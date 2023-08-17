@@ -26,6 +26,8 @@
 
 namespace facebook::velox::dwrf {
 
+using namespace dwio::common::compression;
+
 constexpr uint8_t PAGE_HEADER_SIZE = 3;
 
 /**
@@ -38,17 +40,21 @@ constexpr uint8_t PAGE_HEADER_SIZE = 3;
  */
 static std::unique_ptr<dwio::common::BufferedOutputStream> createCompressor(
     common::CompressionKind kind,
-    dwio::common::compression::CompressionBufferPool& bufferPool,
+    CompressionBufferPool& bufferPool,
     dwio::common::DataBufferHolder& bufferHolder,
     const Config& config,
     const dwio::common::encryption::Encrypter* encrypter = nullptr) {
-  return dwio::common::compression::createCompressor(
+  CompressionOptions dwrfOrcCompressionOptions = getDwrfOrcCompressionOptions(
+      kind,
+      config.get(Config::COMPRESSION_THRESHOLD),
+      config.get(Config::ZLIB_COMPRESSION_LEVEL),
+      config.get(Config::ZSTD_COMPRESSION_LEVEL));
+
+  return createCompressor(
       kind,
       bufferPool,
       bufferHolder,
-      config.get(Config::COMPRESSION_THRESHOLD),
-      config.get(Config::ZLIB_COMPRESSION_LEVEL),
-      config.get(Config::ZSTD_COMPRESSION_LEVEL),
+      dwrfOrcCompressionOptions,
       PAGE_HEADER_SIZE,
       encrypter);
 }

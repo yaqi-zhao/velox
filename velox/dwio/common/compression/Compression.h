@@ -26,6 +26,13 @@ namespace facebook::velox::dwio::common::compression {
 
 class Compressor {
  public:
+  // zlib window bits determine the size of history buffer. If the value is
+  // negative, then no zlib header/trailer or a check value will be added and
+  // ABS(windowBits) will determine the buffer size.
+  // https://zlib.net/manual.html
+  static constexpr int DWRF_ORC_ZLIB_WINDOW_BITS = -15;
+  static constexpr int PARQUET_ZLIB_WINDOW_BITS = 15;
+
   explicit Compressor(int32_t level) : level_{level} {}
 
   virtual ~Compressor() = default;
@@ -60,12 +67,59 @@ class Decompressor {
   const std::string streamDebugInfo_;
 };
 
+struct CompressionOptions {
+  union Format {
+    struct {
+      int windowBits;
+      int32_t compressionLevel;
+    } zlib;
+
+    struct {
+      int32_t compressionLevel;
+    } zstd;
+  } format;
+
+  uint32_t compressionThreshold;
+};
+
+static CompressionOptions getDwrfOrcCompressionOptions(
+    velox::common::CompressionKind kind,
+    uint32_t compressionThreshold,
+    int32_t zlibCompressionLevel,
+    int32_t zstdCompressionLevel) {
+  CompressionOptions options;
+  options.compressionThreshold = compressionThreshold;
+
+  if (kind == velox::common::CompressionKind_ZLIB) {
+    options.format.zlib.windowBits = Compressor::DWRF_ORC_ZLIB_WINDOW_BITS;
+    options.format.zlib.compressionLevel = zlibCompressionLevel;
+  } else if (kind == velox::common::CompressionKind_ZSTD) {
+    options.format.zstd.compressionLevel = zstdCompressionLevel;
+  }
+  return options;
+}
+
+static CompressionOptions getDwrfOrcDecompressionOptions() {
+  CompressionOptions options;
+  options.format.zlib.windowBits = Compressor::DWRF_ORC_ZLIB_WINDOW_BITS;
+  return options;
+}
+
+static CompressionOptions getParquetDecompressionOptions() {
+  CompressionOptions options;
+  options.format.zlib.windowBits = Compressor::PARQUET_ZLIB_WINDOW_BITS;
+  return options;
+}
+
 /**
  * Create a decompressor for the given compression kind.
  * @param kind the compression type to implement
  * @param input the input stream that is the underlying source
  * @param bufferSize the maximum size of the buffer
  * @param pool the memory pool
+ * @param useRawDecompression specify whether to perform raw decompression
+ * @param compressedLength the compressed block length for raw decompression
+ * @param options compression options to use
  */
 std::unique_ptr<dwio::common::SeekableInputStream> createDecompressor(
     facebook::velox::common::CompressionKind kind,
@@ -73,7 +127,10 @@ std::unique_ptr<dwio::common::SeekableInputStream> createDecompressor(
     uint64_t bufferSize,
     memory::MemoryPool& pool,
     const std::string& streamDebugInfo,
-    const dwio::common::encryption::Decrypter* decryptr = nullptr);
+    const dwio::common::encryption::Decrypter* decryptr = nullptr,
+    bool useRawDecompression = false,
+    size_t compressedLength = 0,
+    CompressionOptions options = getDwrfOrcDecompressionOptions());
 
 /**
  * Create a compressor for the given compression kind.
@@ -87,9 +144,7 @@ std::unique_ptr<BufferedOutputStream> createCompressor(
     facebook::velox::common::CompressionKind kind,
     CompressionBufferPool& bufferPool,
     DataBufferHolder& bufferHolder,
-    uint32_t compressionThreshold,
-    int32_t zlibCompressionLevel,
-    int32_t zstdCompressionLevel,
+    CompressionOptions options,
     uint8_t pageHeaderSize,
     const dwio::common::encryption::Encrypter* encrypter = nullptr);
 
