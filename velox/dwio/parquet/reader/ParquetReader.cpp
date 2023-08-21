@@ -117,6 +117,7 @@ class ReaderBase {
   std::shared_ptr<const dwio::common::TypeWithId> schemaWithId_;
 
   const bool binaryAsString = false;
+  bool needPreDecomp = true;
 
   // Map from row group index to pre-created loading BufferedInput.
   std::unordered_map<uint32_t, std::shared_ptr<dwio::common::BufferedInput>>
@@ -137,6 +138,7 @@ ReaderBase::ReaderBase(
 
   loadFileMetaData();
   initializeSchema();
+  needPreDecomp = true;
 }
 
 void ReaderBase::loadFileMetaData() {
@@ -575,12 +577,18 @@ void ReaderBase::scheduleRowGroups(
   auto input = inputs_[thisGroup].get();
   if (!input) {
     inputs_[thisGroup] = reader.loadRowGroup(thisGroup, input_);
+    if (needPreDecomp) {
+      needPreDecomp = reader.preDecompRowGroup(thisGroup);
+    }
   }
   for (auto counter = 0; counter < FLAGS_parquet_prefetch_rowgroups;
        ++counter) {
     if (nextGroup) {
       if (inputs_.count(nextGroup) != 0) {
         inputs_[nextGroup] = reader.loadRowGroup(thisGroup, input_);
+        if (needPreDecomp) {
+          needPreDecomp = reader.preDecompRowGroup(thisGroup);
+        }
       }
     } else {
       break;

@@ -17,25 +17,27 @@
 #pragma once
 
 #include <arrow/util/rle_encoding.h>
-#include "velox/common/compression/Compression.h"
 #include "velox/dwio/common/BitConcatenation.h"
 #include "velox/dwio/common/DirectDecoder.h"
+#include "velox/dwio/common/QplJobPool.h"
 #include "velox/dwio/common/SelectiveColumnReader.h"
 #include "velox/dwio/parquet/reader/BooleanDecoder.h"
 #include "velox/dwio/parquet/reader/PageReaderBase.h"
 #include "velox/dwio/parquet/reader/ParquetTypeWithId.h"
 #include "velox/dwio/parquet/reader/RleBpDataDecoder.h"
 #include "velox/dwio/parquet/reader/StringDecoder.h"
+#include "velox/dwio/parquet/thrift/ParquetThriftTypes.h"
 #include "velox/vector/BaseVector.h"
 
+#ifdef VELOX_ENABLE_QPL
 namespace facebook::velox::parquet {
 
 /// Manages access to pages inside a ColumnChunk. Interprets page headers and
 /// encodings and presents the combination of pages and encoded values as a
 /// continuous stream accessible via readWithVisitor().
-class PageReader : public parquet::PageReaderBase {
+class IAAPageReader : public parquet::PageReaderBase {
  public:
-  PageReader(
+  IAAPageReader(
       std::unique_ptr<dwio::common::SeekableInputStream> stream,
       memory::MemoryPool& pool,
       ParquetTypeWithIdPtr nodeType,
@@ -51,10 +53,14 @@ class PageReader : public parquet::PageReaderBase {
         chunkSize_(chunkSize),
         nullConcatenation_(pool_) {
     type_->makeLevelInfo(leafInfo_);
+    dict_qpl_job_id = 0;
+    data_qpl_job_id = 0;
+    uncompressedDictData_ = nullptr;
+    uncompressedDataV1Data_ = nullptr;
   }
 
   // This PageReader constructor is for unit test only.
-  PageReader(
+  IAAPageReader(
       std::unique_ptr<dwio::common::SeekableInputStream> stream,
       memory::MemoryPool& pool,
       thrift::CompressionCodec::type codec,
@@ -66,45 +72,16 @@ class PageReader : public parquet::PageReaderBase {
         isTopLevel_(maxRepeat_ == 0 && maxDefine_ <= 1),
         codec_(codec),
         chunkSize_(chunkSize),
-        nullConcatenation_(pool_) {}
-
-  common::CompressionKind ThriftCodecToCompressionKind(
-      thrift::CompressionCodec::type codec) const {
-    switch (codec) {
-      case thrift::CompressionCodec::UNCOMPRESSED:
-        return common::CompressionKind::CompressionKind_NONE;
-        break;
-      case thrift::CompressionCodec::SNAPPY:
-        return common::CompressionKind::CompressionKind_SNAPPY;
-        break;
-      case thrift::CompressionCodec::GZIP:
-        return common::CompressionKind::CompressionKind_GZIP;
-        break;
-      case thrift::CompressionCodec::LZO:
-        return common::CompressionKind::CompressionKind_LZO;
-        break;
-      case thrift::CompressionCodec::LZ4:
-        return common::CompressionKind::CompressionKind_LZ4;
-        break;
-      case thrift::CompressionCodec::ZSTD:
-        return common::CompressionKind::CompressionKind_ZSTD;
-        break;
-      case thrift::CompressionCodec::LZ4_RAW:
-        return common::CompressionKind::CompressionKind_LZ4;
-      default:
-        VELOX_UNSUPPORTED(
-            "Unsupported compression type: " +
-            facebook::velox::parquet::thrift::to_string(codec));
-        break;
-    }
+        nullConcatenation_(pool_) {
+    dict_qpl_job_id = 0;
+    data_qpl_job_id = 0;
   }
+
+  ~IAAPageReader();
 
   /// Advances 'numRows' top level rows.
   void skip(int64_t numRows);
-
-  PageReaderType getType() {
-    return PageReaderType::COMMON;
-  }
+  void preDecompressPage(bool& need_pre_decompress);
 
   /// Decodes repdefs for 'numTopLevelRows'. Use getLengthsAndNulls()
   /// to access the lengths and nulls for the different nesting
@@ -157,6 +134,10 @@ class PageReader : public parquet::PageReaderBase {
     dictionaryValues_.reset();
   }
 
+  PageReaderType getType() {
+    return PageReaderType::IAA;
+  }
+
   /// Returns the range of repdefs for the top level rows covered by the last
   /// decoderepDefs().
   std::pair<int32_t, int32_t> repDefRange() const {
@@ -179,6 +160,18 @@ class PageReader : public parquet::PageReaderBase {
   // If the current page has nulls, returns a nulls bitmap owned by 'this'. This
   // is filled for 'numRows' bits.
   const uint64_t* FOLLY_NULLABLE readNulls(int32_t numRows, BufferPtr& buffer);
+
+  void prepareDict(const thrift::PageHeader& pageHeader, bool job_success);
+  bool prepareData(
+      const thrift::PageHeader& pageHeader,
+      int64_t row,
+      bool job_success);
+  uint32_t DecompressAsync(
+      int64_t input_length,
+      const uint8_t* input,
+      int64_t output_buffer_length,
+      uint8_t* output,
+      bool isGzip);
 
   // Skips the define decoder, if any, for 'numValues' top level
   // rows. Returns the number of non-nulls skipped. The range is the
@@ -223,6 +216,12 @@ class PageReader : public parquet::PageReaderBase {
   void prepareDictionary(const thrift::PageHeader& pageHeader);
   void makeDecoder();
 
+  void prefetchDataPageV1(const thrift::PageHeader& pageHeader);
+  void prefetchDataPageV2(const thrift::PageHeader& pageHeader);
+  void prefetchDictionary(const thrift::PageHeader& pageHeader);
+  bool waitQplJob(uint32_t job_id);
+  int getGzipWindowSize(const uint8_t* stream_ptr, uint32_t stream_size);
+
   // For a non-top level leaf, reads the defs and sets 'leafNulls_' and
   // 'numRowsInPage_' accordingly. This is used for non-top level leaves when
   // 'hasChunkRepDefs_' is false.
@@ -234,12 +233,19 @@ class PageReader : public parquet::PageReaderBase {
   const char* FOLLY_NONNULL readBytes(int32_t size, BufferPtr& copy);
 
   // Decompresses data starting at 'pageData_', consuming 'compressedsize' and
-  // producing up to 'decompressedSize' bytes. The The start of the decoding
-  // result is returned. an intermediate copy may be made in 'decompresseddata_'
-  const char* FOLLY_NONNULL decompressData(
+  // producing up to 'uncompressedSize' bytes. The The start of the decoding
+  // result is returned. an intermediate copy may be made in 'uncompresseddata_'
+  const char* FOLLY_NONNULL uncompressData(
       const char* FOLLY_NONNULL pageData,
       uint32_t compressedSize,
-      uint32_t decompressedSize);
+      uint32_t uncompressedSize);
+
+  const bool FOLLY_NONNULL uncompressQplData(
+      const char* FOLLY_NONNULL pageData,
+      uint32_t compressedSize,
+      uint32_t uncompressedSize,
+      BufferPtr& uncompressedData,
+      uint32_t& qpl_job_id);
 
   template <typename T>
   T readField(const char* FOLLY_NONNULL& ptr) {
@@ -291,8 +297,8 @@ class PageReader : public parquet::PageReaderBase {
       Visitor visitor) {
     if (nulls) {
       nullsFromFastPath = dwio::common::useFastPath<Visitor, true>(visitor) &&
-          (!this->type_->type()->isLongDecimal()) &&
-          (this->type_->type()->isShortDecimal() ? isDictionary() : true);
+          (!this->type_->type->isLongDecimal()) &&
+          (this->type_->type->isShortDecimal() ? isDictionary() : true);
 
       if (isDictionary()) {
         auto dictVisitor = visitor.toDictionaryColumnVisitor();
@@ -307,7 +313,7 @@ class PageReader : public parquet::PageReaderBase {
         dictionaryIdDecoder_->readWithVisitor<false>(nullptr, dictVisitor);
       } else {
         directDecoder_->readWithVisitor<false>(
-            nulls, visitor, !this->type_->type()->isShortDecimal());
+            nulls, visitor, !this->type_->type->isShortDecimal());
       }
     }
   }
@@ -442,10 +448,14 @@ class PageReader : public parquet::PageReaderBase {
   // Copy of data if data straddles buffer boundary.
   BufferPtr pageBuffer_;
 
-  // decompressed data for the page. Rep-def-data in V1, data alone in V2.
-  BufferPtr decompressedData_;
+  // Uncompressed data for the page. Rep-def-data in V1, data alone in V2.
+  BufferPtr uncompressedData_;
+  BufferPtr uncompressedDictData_;
+  // char* uncompressedDictData_;
+  BufferPtr uncompressedDataV1Data_;
+  // char* uncompressedDataV1Data_;
 
-  // First byte of decompressed encoded data. Contains the encoded data as a
+  // First byte of uncompressed encoded data. Contains the encoded data as a
   // contiguous run of bytes.
   const char* FOLLY_NULLABLE pageData_{nullptr};
 
@@ -510,10 +520,27 @@ class PageReader : public parquet::PageReaderBase {
   std::unique_ptr<StringDecoder> stringDecoder_;
   std::unique_ptr<BooleanDecoder> booleanDecoder_;
   // Add decoders for other encodings here.
+
+  thrift::PageHeader dictPageHeader_;
+  const char* FOLLY_NULLABLE dictPageData_{nullptr};
+  bool needUncompressDict;
+
+  thrift::PageHeader dataPageHeader_;
+  const char* FOLLY_NULLABLE dataPageData_{nullptr};
+
+  uint32_t dict_qpl_job_id;
+  uint32_t data_qpl_job_id;
+
+  bool pre_decompress_dict = false;
+  bool pre_decompress_data = false;
+  bool isWinSizeFit = false;
+  static constexpr uint8_t CM_ZLIB_DEFAULT_VALUE = 8u;
+  static constexpr uint32_t ZLIB_MIN_HEADER_SIZE = 2u;
+  static constexpr uint32_t ZLIB_INFO_OFFSET = 4u;
 };
 
 template <typename Visitor>
-void PageReader::readWithVisitor(Visitor& visitor) {
+void IAAPageReader::readWithVisitor(Visitor& visitor) {
   constexpr bool hasFilter =
       !std::is_same_v<typename Visitor::FilterType, common::AlwaysTrue>;
   constexpr bool filterOnly =
@@ -579,3 +606,5 @@ void PageReader::readWithVisitor(Visitor& visitor) {
 }
 
 } // namespace facebook::velox::parquet
+
+#endif
