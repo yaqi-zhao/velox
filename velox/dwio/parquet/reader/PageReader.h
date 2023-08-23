@@ -22,7 +22,6 @@
 #include "velox/dwio/common/DirectDecoder.h"
 #include "velox/dwio/common/SelectiveColumnReader.h"
 #include "velox/dwio/parquet/reader/BooleanDecoder.h"
-#include "velox/dwio/parquet/reader/PageReaderBase.h"
 #include "velox/dwio/parquet/reader/ParquetTypeWithId.h"
 #include "velox/dwio/parquet/reader/RleBpDataDecoder.h"
 #include "velox/dwio/parquet/reader/StringDecoder.h"
@@ -33,7 +32,7 @@ namespace facebook::velox::parquet {
 /// Manages access to pages inside a ColumnChunk. Interprets page headers and
 /// encodings and presents the combination of pages and encoded values as a
 /// continuous stream accessible via readWithVisitor().
-class PageReader : public parquet::PageReaderBase {
+class PageReader {
  public:
   PageReader(
       std::unique_ptr<dwio::common::SeekableInputStream> stream,
@@ -51,6 +50,10 @@ class PageReader : public parquet::PageReaderBase {
         chunkSize_(chunkSize),
         nullConcatenation_(pool_) {
     type_->makeLevelInfo(leafInfo_);
+    dict_qpl_job_id = 0;
+    data_qpl_job_id = 0;
+    uncompressedDictData_ = nullptr;
+    uncompressedDataV1Data_ = nullptr;
   }
 
   // This PageReader constructor is for unit test only.
@@ -102,9 +105,19 @@ class PageReader : public parquet::PageReaderBase {
   /// Advances 'numRows' top level rows.
   void skip(int64_t numRows);
 
-  PageReaderType getType() {
-    return PageReaderType::COMMON;
-  }
+  /// Pre-decompress GZIP page with IAA
+  void preDecompressPage(bool& need_pre_decompress);
+  void prefetchDataPageV1(const thrift::PageHeader& pageHeader);
+  void prefetchDataPageV2(const thrift::PageHeader& pageHeader);
+  void prefetchDictionary(const thrift::PageHeader& pageHeader);
+  const bool FOLLY_NONNULL getDecompRes(int job_id);
+  bool seekToPreDecompPage(int64_t row);
+  const bool FOLLY_NONNULL iaaDecompressGzip(
+      const char* FOLLY_NONNULL pageData,
+      uint32_t compressedSize,
+      uint32_t uncompressedSize,
+      BufferPtr& uncompressedData,
+      int& qpl_job_id);
 
   /// Decodes repdefs for 'numTopLevelRows'. Use getLengthsAndNulls()
   /// to access the lengths and nulls for the different nesting
@@ -218,9 +231,14 @@ class PageReader : public parquet::PageReaderBase {
   // next page.
   void updateRowInfoAfterPageSkipped();
 
-  void prepareDataPageV1(const thrift::PageHeader& pageHeader, int64_t row);
+  void prepareDataPageV1(
+      const thrift::PageHeader& pageHeader,
+      int64_t row,
+      bool job_success = false);
   void prepareDataPageV2(const thrift::PageHeader& pageHeader, int64_t row);
-  void prepareDictionary(const thrift::PageHeader& pageHeader);
+  void prepareDictionary(
+      const thrift::PageHeader& pageHeader,
+      bool job_success = false);
   void makeDecoder();
 
   // For a non-top level leaf, reads the defs and sets 'leafNulls_' and
@@ -510,6 +528,23 @@ class PageReader : public parquet::PageReaderBase {
   std::unique_ptr<StringDecoder> stringDecoder_;
   std::unique_ptr<BooleanDecoder> booleanDecoder_;
   // Add decoders for other encodings here.
+
+  // Used for pre-decompress
+  BufferPtr uncompressedDictData_;
+  BufferPtr uncompressedDataV1Data_;
+  thrift::PageHeader dictPageHeader_;
+  const char* FOLLY_NULLABLE dictPageData_{nullptr};
+  bool needUncompressDict;
+
+  thrift::PageHeader dataPageHeader_;
+  const char* FOLLY_NULLABLE dataPageData_{nullptr};
+
+  int dict_qpl_job_id;
+  int data_qpl_job_id;
+
+  bool pre_decompress_dict = false;
+  bool pre_decompress_data = false;
+  bool isWinSizeFit = false;
 };
 
 template <typename Visitor>

@@ -194,6 +194,97 @@ uint64_t ZlibDecompressor::decompress(
   return destLength - zstream_.avail_out;
 }
 
+class GzipIAADecompressor : public AsyncDecompressor {
+ public:
+  explicit GzipIAADecompressor() {}
+
+  explicit GzipIAADecompressor(
+      uint64_t blockSize,
+      const std::string& streamDebugInfo)
+      : AsyncDecompressor{blockSize, streamDebugInfo} {}
+
+  int decompress(
+      const char* src,
+      uint64_t srcLength,
+      char* dest,
+      uint64_t destLength) override;
+
+  bool waitResult(int job_id) override;
+};
+
+int GzipIAADecompressor::decompress(
+    const char* src,
+    uint64_t srcLength,
+    char* dest,
+    uint64_t destLength) {
+#ifdef VELOX_ENABLE_QPL
+  dwio::common::QplJobHWPool& qpl_job_pool =
+      dwio::common::QplJobHWPool::GetInstance();
+  int job_id = 0;
+  qpl_job* job = qpl_job_pool.AcquireDeflateJob(job_id);
+  if (job == nullptr) {
+    LOG(WARNING) << "cannot AcquireDeflateJob ";
+    return -1; // Invalid job id to illustrate the
+               // failed decompress job.
+  }
+  job->op = qpl_op_decompress;
+  job->next_in_ptr = reinterpret_cast<uint8_t*>(const_cast<char*>(src));
+  job->next_out_ptr = reinterpret_cast<uint8_t*>(dest);
+  job->available_in = static_cast<uint32_t>(srcLength);
+  job->available_out = static_cast<uint32_t>(destLength);
+  job->flags = QPL_FLAG_FIRST | QPL_FLAG_LAST | QPL_FLAG_ZLIB_MODE;
+
+  qpl_status status = qpl_submit_job(job);
+  if (status == QPL_STS_QUEUES_ARE_BUSY_ERR) {
+    qpl_job_pool.ReleaseJob(job_id);
+    job = qpl_job_pool.AcquireDeflateJob(job_id);
+    if (job == nullptr) {
+      LOG(WARNING)
+          << "cannot acqure deflate job after QPL_STS_QUEUES_ARE_BUSY_ERR ";
+      return -1; // Invalid job id to illustrate the
+                 // failed decompress job.
+    }
+    job->op = qpl_op_decompress;
+    job->next_in_ptr = reinterpret_cast<uint8_t*>(const_cast<char*>(src));
+    job->next_out_ptr = reinterpret_cast<uint8_t*>(dest);
+    job->available_in = static_cast<uint32_t>(srcLength);
+    job->available_out = static_cast<uint32_t>(destLength);
+    job->flags = QPL_FLAG_FIRST | QPL_FLAG_LAST | QPL_FLAG_ZLIB_MODE;
+
+    status = qpl_submit_job(job);
+  }
+  if (status != QPL_STS_OK) {
+    qpl_job_pool.ReleaseJob(job_id);
+    LOG(WARNING) << "cannot submit job, error status: " << status;
+    return -1; // Invalid job id to illustrate the
+               // failed decompress job.
+  } else {
+    return job_id;
+  }
+#else
+  return -1;
+#endif
+}
+
+bool GzipIAADecompressor::waitResult(int job_id) {
+#ifdef VELOX_ENABLE_QPL
+  dwio::common::QplJobHWPool& qpl_job_pool =
+      dwio::common::QplJobHWPool::GetInstance();
+  if (job_id <= 0 || job_id >= qpl_job_pool.MAX_JOB_NUMBER) {
+    return true;
+  }
+  qpl_job* job = qpl_job_pool.GetJobById(job_id);
+
+  auto status = qpl_wait_job(job);
+  qpl_job_pool.ReleaseJob(job_id);
+  if (status == QPL_STS_OK) {
+    return true;
+  }
+  LOG(WARNING) << "Decompress w/IAA error, status: " << status;
+#endif
+  return false;
+}
+
 class LzoDecompressor : public Decompressor {
  public:
   explicit LzoDecompressor(
@@ -571,6 +662,21 @@ std::unique_ptr<dwio::common::SeekableInputStream> createDecompressor(
       streamDebugInfo,
       useRawDecompression,
       compressedLength);
+}
+
+std::unique_ptr<dwio::common::compression::AsyncDecompressor>
+createAsyncDecompressor(
+    facebook::velox::common::CompressionKind kind,
+    uint64_t bufferSize,
+    const std::string& streamDebugInfo) {
+  std::unique_ptr<AsyncDecompressor> decompressor;
+  switch (static_cast<int64_t>(kind)) {
+    case CompressionKind::CompressionKind_GZIP:
+      return std::make_unique<GzipIAADecompressor>(bufferSize, streamDebugInfo);
+    default:
+      DWIO_RAISE("Asynchronous mode not support for compression codec ", kind);
+  }
+  return nullptr;
 }
 
 } // namespace facebook::velox::dwio::common::compression

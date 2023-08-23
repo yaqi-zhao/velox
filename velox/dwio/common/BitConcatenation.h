@@ -15,7 +15,6 @@
  */
 
 #include "velox/buffer/Buffer.h"
-#pragma once
 
 namespace facebook::velox::dwio::common {
 

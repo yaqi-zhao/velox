@@ -19,8 +19,6 @@
 #include <iostream>
 #include "velox/common/base/Exceptions.h"
 
-#ifdef VELOX_ENABLE_QPL
-
 namespace facebook::velox::dwio::common {
 
 std::array<qpl_job*, QplJobHWPool::MAX_JOB_NUMBER>
@@ -29,8 +27,6 @@ std::array<std::atomic<bool>, QplJobHWPool::MAX_JOB_NUMBER>
     QplJobHWPool::hw_job_ptr_locks;
 bool QplJobHWPool::iaa_job_ready = false;
 std::unique_ptr<uint8_t[]> QplJobHWPool::hw_jobs_buffer;
-
-// static QplJobHWPool pool = QplJobHWPool::GetInstance();
 
 QplJobHWPool& QplJobHWPool::GetInstance() {
   static QplJobHWPool pool;
@@ -56,12 +52,12 @@ QplJobHWPool::~QplJobHWPool() {
 bool QplJobHWPool::AllocateQPLJob() {
   uint32_t job_size = 0;
 
-  /// Get size required for saving a single qpl job object
+  // Get size required for saving a single qpl job object
   qpl_get_job_size(qpl_path, &job_size);
-  /// Allocate entire buffer for storing all job objects
+  // Allocate entire buffer for storing all job objects
   hw_jobs_buffer = std::make_unique<uint8_t[]>(job_size * MAX_JOB_NUMBER);
-  /// Initialize pool for storing all job object pointers
-  /// Reallocate buffer by shifting address offset for each job object.
+  // Initialize pool for storing all job object pointers
+  // Allocate buffer by shifting address offset for each job object.
   for (uint32_t index = 0; index < MAX_JOB_NUMBER; ++index) {
     qpl_job* qpl_job_ptr =
         reinterpret_cast<qpl_job*>(hw_jobs_buffer.get() + index * job_size);
@@ -81,7 +77,8 @@ bool QplJobHWPool::AllocateQPLJob() {
   return true;
 }
 
-qpl_job* QplJobHWPool::AcquireDeflateJob(uint32_t& job_id) {
+qpl_job* QplJobHWPool::AcquireDeflateJob(int& job_id) {
+  job_id = -1;
   if (!job_ready()) {
     return nullptr;
   }
@@ -102,8 +99,8 @@ qpl_job* QplJobHWPool::AcquireDeflateJob(uint32_t& job_id) {
   return hw_job_ptr_pool[index];
 }
 
-void QplJobHWPool::ReleaseJob(uint32_t job_id) {
-  if (job_id >= MAX_JOB_NUMBER) {
+void QplJobHWPool::ReleaseJob(int job_id) {
+  if (job_id >= MAX_JOB_NUMBER || job_id <= 0) {
     return;
   }
   assert(job_id < MAX_JOB_NUMBER);
@@ -118,4 +115,3 @@ bool QplJobHWPool::tryLockJob(uint32_t index) {
 }
 
 } // namespace facebook::velox::dwio::common
-#endif

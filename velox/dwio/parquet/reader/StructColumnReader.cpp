@@ -130,7 +130,6 @@ void StructColumnReader::enqueueRowGroup(
 }
 
 bool StructColumnReader::preDecompRowGroup(uint32_t index) {
-#ifdef VELOX_ENABLE_QPL
   for (auto& child : children_) {
     if (!needPreDecomp) {
       return false;
@@ -147,8 +146,6 @@ bool StructColumnReader::preDecompRowGroup(uint32_t index) {
     }
   }
   return needPreDecomp;
-#endif
-  return false;
 }
 
 void StructColumnReader::seekToRowGroup(uint32_t index) {

@@ -20,60 +20,52 @@
 #include <mutex>
 #include <random>
 #include <vector>
-
-#ifdef VELOX_ENABLE_QPL
 #include "qpl/qpl.h"
 
 namespace facebook::velox::dwio::common {
 
-/// QplJobHWPool is resource pool to provide the job objects, which is
-/// used for storing context information during.
-/// Memory for QPL job will be allocated when the QPLJobHWPool instance is
-/// created
-///
-//  QPL job can offload RLE-decoding/Filter/(De)compression works to hardware
-//  accelerator.
+// QplJobHWPool is resource pool to provide the job objects, which is
+// used for storing context information.
+// Memory for QPL job will be allocated when the QPLJobHWPool instance is
+// created
 class QplJobHWPool {
  public:
   static QplJobHWPool& GetInstance();
   QplJobHWPool();
   ~QplJobHWPool();
-  /// Acquire QPL job
-  ///
-  /// @param job_id QPL job id, used when release QPL job
-  /// \return Pointer to the QPL job. If acquire job failed, return nullptr.
-  qpl_job* AcquireDeflateJob(uint32_t& job_id);
 
-  /// \brief Release QPL job by the job_id.
-  void ReleaseJob(uint32_t job_id);
+  // Release QPL job by the job_id.
+  void ReleaseJob(int job_id);
 
-  /// \brief Return if the QPL job is allocated sucessfully.
+  // Return if the QPL job is allocated sucessfully.
   const bool& job_ready() {
     return iaa_job_ready;
   }
 
-  qpl_job* GetJobById(uint32_t job_id) {
+  qpl_job* AcquireDeflateJob(int& job_id);
+  qpl_job* GetJobById(int job_id) {
+    if (job_id >= MAX_JOB_NUMBER || job_id <= 0) {
+      return nullptr;
+    }
     return hw_job_ptr_pool[job_id];
   }
 
-  static constexpr qpl_path_t qpl_path = qpl_path_hardware;
-
+  // Max jobs in QPL_JOB_POOL
   static constexpr auto MAX_JOB_NUMBER = 1024;
 
  private:
   bool tryLockJob(uint32_t index);
   bool AllocateQPLJob();
-
-  /// Max jobs in QPL_JOB_POOL
-  /// Entire buffer for storing all job objects
-  static std::unique_ptr<uint8_t[]> hw_jobs_buffer;
-  /// Job pool for storing all job object pointers
+  static constexpr qpl_path_t qpl_path = qpl_path_hardware;
+  // Job pool for storing all job object pointers
   static std::array<qpl_job*, MAX_JOB_NUMBER> hw_job_ptr_pool;
 
-  /// Locks for accessing each job object pointers
-  static bool iaa_job_ready;
+  // Entire buffer for storing all job objects
+  static std::unique_ptr<uint8_t[]> hw_jobs_buffer;
+
+  // Locks for accessing each job object pointers
   static std::array<std::atomic<bool>, MAX_JOB_NUMBER> hw_job_ptr_locks;
+  static bool iaa_job_ready;
 };
 
 } // namespace facebook::velox::dwio::common
-#endif
