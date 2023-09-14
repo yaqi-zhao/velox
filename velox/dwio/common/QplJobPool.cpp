@@ -28,6 +28,10 @@ std::array<qpl_job*, QplJobHWPool::MAX_JOB_NUMBER> QplJobHWPool::hw_job_ptr_pool
 std::array<std::atomic<bool>, QplJobHWPool::MAX_JOB_NUMBER> QplJobHWPool::hw_job_ptr_locks;
 bool QplJobHWPool::iaa_job_ready = false;
 std::unique_ptr<uint8_t[]> QplJobHWPool::hw_jobs_buffer;
+std::queue<uint32_t> QplJobHWPool::hw_job_ptr_queue;
+std::array<uint32_t, QplJobHWPool::MAX_JOB_NUMBER> QplJobHWPool::hw_job_status_array; // 0 unsubmitted, 1 submitted
+std::mutex QplJobHWPool::mtx;
+std::mutex QplJobHWPool::job_queue_mtx;
 
 QplJobHWPool& QplJobHWPool::GetInstance() {
   static QplJobHWPool pool;
@@ -59,6 +63,7 @@ bool QplJobHWPool::AllocateQPLJob() {
   /// Initialize pool for storing all job object pointers
   /// Reallocate buffer by shifting address offset for each job object.
   for (uint32_t index = 0; index < MAX_JOB_NUMBER; ++index) {
+    hw_job_status_array[index] = 0;
     qpl_job* qpl_job_ptr =
         reinterpret_cast<qpl_job*>(hw_jobs_buffer.get() + index * job_size);
     if (qpl_init_job(qpl_path, qpl_job_ptr) != QPL_STS_OK) {
@@ -113,6 +118,59 @@ bool QplJobHWPool::tryLockJob(uint32_t index) {
     bool expected = false;
     assert(index < MAX_JOB_NUMBER);
     return hw_job_ptr_locks[index].compare_exchange_strong(expected, true);
+}
+
+bool QplJobHWPool::push_unsubmitted_job(uint32_t job_id) {
+  if (hw_job_ptr_queue.size() >= 256) {
+    LOG(WARNING) << "hw_job_ptr_queue size: " << hw_job_ptr_queue.size();
+    return false;
+  }
+  mtx.lock();
+  hw_job_ptr_queue.push(job_id);
+  hw_job_status_array[job_id] = 1;
+  // LOG(WARNING) << "hw_job_ptr_queue push to queue current size: " << hw_job_ptr_queue.size();
+  mtx.unlock();
+  return true;
+}
+
+void QplJobHWPool::submit_job_queue() {
+  if (hw_job_ptr_queue.empty()) {
+    return;
+  }
+  if (!mtx.try_lock()) {
+    return;
+  }
+
+  while (!hw_job_ptr_queue.empty()) {
+    qpl_job* job =  hw_job_ptr_pool[hw_job_ptr_queue.front()];
+    uint8_t* input = job->next_in_ptr;
+    uint32_t avl_in = job->available_in;
+    uint32_t total_in = job->total_in;
+    auto status = qpl_submit_job(hw_job_ptr_pool[hw_job_ptr_queue.front()]);
+    if (status == QPL_STS_OK) {
+      hw_job_status_array[hw_job_ptr_queue.front()] = 0;
+      hw_job_ptr_queue.pop();
+      // LOG(WARNING) << "hw_job_ptr_queue pop out of queue current size: " << hw_job_ptr_queue.size();
+    } else if (status == QPL_STS_QUEUES_ARE_BUSY_ERR) {
+      // LOG(WARNING) << "hw_job_ptr_queue QPL_STS_QUEUES_ARE_BUSY_ERR ";
+      job->next_in_ptr = input;
+      job->available_in = avl_in;
+      job->total_in = total_in;
+      break;
+    } else {
+      hw_job_status_array[hw_job_ptr_queue.front()] = 0;
+      hw_job_ptr_queue.pop();
+      // LOG(WARNING) << "hw_job_ptr_queue job " << hw_job_ptr_queue.front() << " status not ok: " << status << ", " << hw_job_ptr_queue.size();
+    }
+  }
+  submitting_job = false;
+  mtx.unlock();
+}
+
+bool QplJobHWPool::is_job_submitted(uint32_t job_id) {
+  std::lock_guard<std::mutex> lock(mtx);
+  // LOG(WARNING) << "is_job_submitted: " << hw_job_status_array[job_id];
+  return hw_job_status_array[job_id] == 0;
 }
 
 }

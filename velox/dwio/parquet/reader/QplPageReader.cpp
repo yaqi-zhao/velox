@@ -209,6 +209,7 @@ uint32_t QplPageReader::DecompressAsync(int64_t input_length, const uint8_t* inp
     uint32_t job_id = 0;
     qpl_job* job = qpl_job_pool.AcquireDeflateJob(job_id);
     if (job == nullptr) {
+      LOG(WARNING) << "AcquireDeflateJob fail ";
         return qpl_job_pool.MAX_JOB_NUMBER; // Invalid job id to illustrate the failed decompress job.
     }
     job->op = qpl_op_decompress;
@@ -222,24 +223,32 @@ uint32_t QplPageReader::DecompressAsync(int64_t input_length, const uint8_t* inp
     }
     
     qpl_status status = qpl_submit_job(job);
+    // LOG(WARNING) << "qpl_submit_job " << job_id << " status " << status;
     if (status == QPL_STS_QUEUES_ARE_BUSY_ERR) {
-      qpl_job_pool.ReleaseJob(job_id);
-      job = qpl_job_pool.AcquireDeflateJob(job_id);
-      if (job == nullptr) {
-          return qpl_job_pool.MAX_JOB_NUMBER; // Invalid job id to illustrate the failed decompress job.
-      }
-      job->op = qpl_op_decompress;
       job->next_in_ptr = const_cast<uint8_t*>(input);
-      job->next_out_ptr = output;
-      job->available_in = input_length;
-      job->available_out = output_buffer_length;
-      job->flags = QPL_FLAG_FIRST | QPL_FLAG_LAST;
-      if (isGzip) {
-        job->flags |= QPL_FLAG_GZIP_MODE;
+      bool result = qpl_job_pool.push_unsubmitted_job(job_id);
+      if (!result) {
+        qpl_job_pool.ReleaseJob(job_id);
+        LOG(WARNING) << "cannot submit job because of qpl size full ";
+        return qpl_job_pool.MAX_JOB_NUMBER; // Invalid job id to illustrate the failed decompress job.        
       }
+      status = QPL_STS_OK;
+      // job = qpl_job_pool.AcquireDeflateJob(job_id);
+      // if (job == nullptr) {
+      //     return qpl_job_pool.MAX_JOB_NUMBER; // Invalid job id to illustrate the failed decompress job.
+      // }
+      // job->op = qpl_op_decompress;
+      // job->next_in_ptr = const_cast<uint8_t*>(input);
+      // job->next_out_ptr = output;
+      // job->available_in = input_length;
+      // job->available_out = output_buffer_length;
+      // job->flags = QPL_FLAG_FIRST | QPL_FLAG_LAST;
+      // if (isGzip) {
+      //   job->flags |= QPL_FLAG_GZIP_MODE;
+      // }
 
-      _umwait(1, __rdtsc() + 1000);
-      status = qpl_submit_job(job);
+      // _umwait(1, __rdtsc() + 1000);
+      // status = qpl_submit_job(job);
     }
     if (status != QPL_STS_OK) {
         qpl_job_pool.ReleaseJob(job_id);
@@ -1308,6 +1317,10 @@ bool QplPageReader::waitQplJob(uint32_t job_id) {
     job_id = 0;
     return true;
   }
+  while (!qpl_job_pool.is_job_submitted(job_id)) {
+    // LOG(WARNING) << "job " << job_id << " not submmited";
+    qpl_job_pool.submit_job_queue();
+  }
   qpl_job* job = qpl_job_pool.GetJobById(job_id);
 
   auto status = qpl_check_job(job);
@@ -1317,12 +1330,16 @@ bool QplPageReader::waitQplJob(uint32_t job_id) {
       // _umonitor(job->next_out_ptr + job->available_out - 1);
       // _umwait(1, __rdtsc() + 1000);
       _tpause(1, 1000);
+      // if (check_time > 1000) {
+      //   LOG(WARNING) << "check job: " << job_id;
+      // }
       status = qpl_check_job(job);
       check_time++;
   } 
   
   qpl_fini_job(job);
   qpl_job_pool.ReleaseJob(job_id);
+  qpl_job_pool.submit_job_queue();
   if (status != QPL_STS_OK) {
       return false;   
   }
