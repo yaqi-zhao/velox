@@ -476,6 +476,7 @@ void ReaderBase::scheduleRowGroups(
   if (!input) {
     auto newInput = input_->clone();
     reader.enqueueRowGroup(thisGroup, *newInput);
+    // std::cout << "load row group " << thisGroup << ", file: " << this->bufferedInput().getReadFile()->getName() << std::endl;
     newInput->load(dwio::common::LogType::STRIPE);
     inputs_[thisGroup] = std::move(newInput);
     reader.preDecompRowGroup(thisGroup);
@@ -487,6 +488,7 @@ void ReaderBase::scheduleRowGroups(
         auto newInput = input_->clone();
         reader.enqueueRowGroup(nextGroup, *newInput);
         newInput->load(dwio::common::LogType::STRIPE);
+        // std::cout << "pre load row group " << counter << std::endl;
         inputs_[nextGroup] = std::move(newInput);
         reader.preDecompRowGroup(nextGroup);
       }

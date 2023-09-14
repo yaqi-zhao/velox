@@ -31,6 +31,16 @@
 #ifdef VELOX_ENABLE_QPL
 namespace facebook::velox::parquet {
 
+struct RowGroupPageInfo {
+  int64_t numValues; //Number of values in this row group 
+  int64_t visitedRows; // rows already read
+  uint64_t pageStart{0};
+  thrift::PageHeader dataPageHeader;
+  const char* FOLLY_NULLABLE dataPageData{nullptr};
+  BufferPtr uncompressedDataV1Data;
+
+};
+
 /// Manages access to pages inside a ColumnChunk. Interprets page headers and
 /// encodings and presents the combination of pages and encoded values as a
 /// continuous stream accessible via readWithVisitor().
@@ -82,7 +92,7 @@ class QplPageReader {
   /// Advances 'numRows' top level rows.
   void skip(int64_t numRows);
 
-  void preDecompressPage();
+  void preDecompressPage(int64_t numValues);
   uint32_t DecompressAsync(int64_t input_length, const uint8_t* input,
                              int64_t output_buffer_length, uint8_t* output, bool isGzip);
 
@@ -146,6 +156,7 @@ class QplPageReader {
   // Parses the PageHeader at 'inputStream_', and move the bufferStart_ and
   // bufferEnd_ to the corresponding positions.
   thrift::PageHeader readPageHeader();
+  bool readPageHeader_1(thrift::PageHeader& pageHeader);
 
  private:
   // Indicates that we only want the repdefs for the next page. Used when
@@ -211,6 +222,7 @@ class QplPageReader {
   void prefetchDataPageV2(const thrift::PageHeader& pageHeader);
   void prefetchDictionary(const thrift::PageHeader& pageHeader);
   bool waitQplJob(uint32_t job_id);
+  void prefetchNextPage();
 
 
   // For a non-top level leaf, reads the defs and sets 'leafNulls_' and
@@ -526,6 +538,7 @@ class QplPageReader {
 
   bool pre_decompress_dict = false;
   bool pre_decompress_data = false;
+  RowGroupPageInfo rowGroupPageInfo_;
 };
 
 template <typename Visitor>
