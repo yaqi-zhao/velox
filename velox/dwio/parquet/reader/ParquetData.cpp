@@ -98,7 +98,7 @@ void ParquetData::preDecompRowGroup(uint32_t index) {
       type_,
       metaData.codec,
       metaData.total_compressed_size);    
-      pageReaders_[index]->preDecompressPage();
+      pageReaders_[index]->preDecompressPage(metaData.num_values);
   }
 #endif  
 }

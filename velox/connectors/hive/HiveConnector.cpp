@@ -24,6 +24,9 @@
 #include <boost/lexical_cast.hpp>
 
 #include <memory>
+#ifdef VELOX_ENABLE_QPL
+#include "velox/dwio/common/QplJobPool.h"
+#endif
 
 using namespace facebook::velox::exec;
 using namespace facebook::velox::dwrf;
@@ -969,7 +972,11 @@ HiveConnector::HiveConnector(
               SimpleLRUCache<std::string, std::shared_ptr<FileHandle>>>(
               FLAGS_num_file_handle_cache),
           std::make_unique<FileHandleGenerator>(std::move(properties))),
-      executor_(executor) {}
+      executor_(executor) {
+#ifdef VELOX_ENABLE_QPL
+    dwio::common::QplJobHWPool::GetInstance(); // Initialize QPL Job pool
+#endif           
+      }
 
 std::unique_ptr<core::PartitionFunction> HivePartitionFunctionSpec::create(
     int numPartitions) const {

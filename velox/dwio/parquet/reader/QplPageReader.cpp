@@ -32,7 +32,7 @@ namespace facebook::velox::parquet {
 using thrift::Encoding;
 using thrift::PageHeader;
 
-void QplPageReader::preDecompressPage() {
+void QplPageReader::preDecompressPage(int64_t numValues) {
   for (;;) {
     auto dataStart = pageStart_;
     if (chunkSize_ <= pageStart_) {
@@ -58,6 +58,54 @@ void QplPageReader::preDecompressPage() {
     }
     break;
   }
+  rowGroupPageInfo_.numValues = numValues;
+  rowGroupPageInfo_.visitedRows = 0;
+}
+
+void QplPageReader::prefetchNextPage() {
+  if (rowGroupPageInfo_.visitedRows + numRowsInPage_ >= rowGroupPageInfo_.numValues) {
+    return;
+  }
+  // std::cout << "rowGroupPageInfo_.visitedRows: " << rowGroupPageInfo_.visitedRows << ", numRowsInPage_: "\
+  //  << numRowsInPage_ << ", rowGroupPageInfo_.numValues: " << rowGroupPageInfo_.numValues \
+  //  << ", type_->parquetType_.value(): " << type_->parquetType_.value() << std::endl;
+  if (chunkSize_ <= pageStart_) {
+    // std::cout << "Not support error: chunkSize_: " << chunkSize_ << " pageStart_" << pageStart_ << std::endl;
+    // This may happen if seeking to exactly end of row group.
+    return;
+  }
+  PageHeader pageHeader;
+  bool res = readPageHeader_1(pageHeader);
+  if (!res) {
+    return;
+  }
+  rowGroupPageInfo_.pageStart = pageDataStart_ + pageHeader.compressed_page_size;
+    switch (pageHeader.type) {
+      case thrift::PageType::DATA_PAGE: {
+        dataPageHeader_ = pageHeader;
+        VELOX_CHECK(
+            pageHeader.type == thrift::PageType::DATA_PAGE &&
+            pageHeader.__isset.data_page_header);
+        
+        rowGroupPageInfo_.dataPageData = readBytes(pageHeader.compressed_page_size, pageBuffer_);   
+        pre_decompress_data = uncompressQplData(
+              rowGroupPageInfo_.dataPageData,
+              pageHeader.compressed_page_size,
+              pageHeader.uncompressed_page_size,
+              rowGroupPageInfo_.uncompressedDataV1Data,
+              data_qpl_job_id);
+        break;
+      }
+      case thrift::PageType::DATA_PAGE_V2:
+        std::cout << "error" << std::endl;
+        break;
+      case thrift::PageType::DICTIONARY_PAGE:
+        std::cout << "error" << std::endl;
+        break;
+      default:
+        break; // ignore INDEX page type and any other custom extensions   
+    }
+
 }
 
 void QplPageReader::seekToPage(int64_t row) {
@@ -98,11 +146,13 @@ void QplPageReader::seekToPage(int64_t row) {
     auto dataStart = pageStart_;
     if (chunkSize_ <= pageStart_) {
       // This may happen if seeking to exactly end of row group.
+      // std::cout << "1 Not support error: chunkSize_: " << chunkSize_ << " pageStart_" << pageStart_ << std::endl;
       numRepDefsInPage_ = 0;
       numRowsInPage_ = 0;
       break;
     }
     PageHeader pageHeader = readPageHeader();
+    // std::cout << "readPageHeader" << std::endl;
     pageStart_ = pageDataStart_ + pageHeader.compressed_page_size;
 
     switch (pageHeader.type) {
@@ -133,13 +183,19 @@ void QplPageReader::seekToPage(int64_t row) {
   }
 }
 
-PageHeader QplPageReader::readPageHeader() {
+bool QplPageReader::readPageHeader_1(PageHeader& pageHeader) {
+  // printf("bufferStart_ %p bufferEnd_ %p", bufferStart_, bufferEnd_);
+  // std::cout << "bufferEnd_ - bufferStart_: " << bufferEnd_ - bufferStart_;
   if (bufferEnd_ == bufferStart_) {
     const void* buffer;
     int32_t size;
     inputStream_->Next(&buffer, &size);
+    // std::cout << ", size:" << size;
     bufferStart_ = reinterpret_cast<const char*>(buffer);
     bufferEnd_ = bufferStart_ + size;
+  }
+  if (bufferEnd_ == bufferStart_) {
+    return false;
   }
 
   std::shared_ptr<thrift::ThriftTransport> transport =
@@ -147,11 +203,38 @@ PageHeader QplPageReader::readPageHeader() {
           inputStream_.get(), bufferStart_, bufferEnd_);
   apache::thrift::protocol::TCompactProtocolT<thrift::ThriftTransport> protocol(
       transport);
-  PageHeader pageHeader;
   uint64_t readBytes;
   readBytes = pageHeader.read(&protocol);
+  // std::cout << ", readBytes: " << readBytes << std::endl;;
 
   pageDataStart_ = pageStart_ + readBytes;
+  // std::cout << ", pageDataStart_: " << pageDataStart_ << std::endl;
+  return true;
+}
+
+PageHeader QplPageReader::readPageHeader() {
+  // printf("bufferStart_ %p bufferEnd_ %p", bufferStart_, bufferEnd_)
+  // std::cout << "bufferEnd_ - bufferStart_: " << bufferEnd_ - bufferStart_;
+  if (bufferEnd_ == bufferStart_) {
+    const void* buffer;
+    int32_t size;
+    inputStream_->Next(&buffer, &size);
+    // std::cout << ", size:" << size;
+    bufferStart_ = reinterpret_cast<const char*>(buffer);
+    bufferEnd_ = bufferStart_ + size;
+  }
+  PageHeader pageHeader;
+  std::shared_ptr<thrift::ThriftTransport> transport =
+      std::make_shared<thrift::ThriftStreamingTransport>(
+          inputStream_.get(), bufferStart_, bufferEnd_);
+  apache::thrift::protocol::TCompactProtocolT<thrift::ThriftTransport> protocol(
+      transport);
+  uint64_t readBytes;
+  readBytes = pageHeader.read(&protocol);
+  // std::cout << ", readBytes: " << readBytes << std::endl;;
+
+  pageDataStart_ = pageStart_ + readBytes;
+  // std::cout << ", pageDataStart_: " << pageDataStart_ << std::endl;
   return pageHeader;
 }
 
@@ -380,7 +463,6 @@ void QplPageReader::prefetchDataPageV1(const thrift::PageHeader& pageHeader) {
         uncompressedDataV1Data_,
         data_qpl_job_id);
   return;
-
 }
 
 void QplPageReader::prefetchDataPageV2(const thrift::PageHeader& pageHeader) {
@@ -557,11 +639,23 @@ void QplPageReader::prepareDict(const thrift::PageHeader& pageHeader, bool job_s
 
 bool QplPageReader::prepareData(const thrift::PageHeader& pageHeader, int64_t row, bool job_success) {
   if (!pre_decompress_data || !job_success) {
+      if (rowGroupPageInfo_.visitedRows > 0)  {
+        dataPageData_ = rowGroupPageInfo_.dataPageData;
+      }
       pageData_ = uncompressData(
       dataPageData_,
       pageHeader.compressed_page_size,
       pageHeader.uncompressed_page_size);    
   } else {
+    if (rowGroupPageInfo_.visitedRows > 0)  {
+      BufferPtr tmp = uncompressedDataV1Data_;
+      uncompressedDataV1Data_ = rowGroupPageInfo_.uncompressedDataV1Data;
+      rowGroupPageInfo_.uncompressedDataV1Data = tmp;
+      // dwio::common::ensureCapacity<char>(uncompressedDataV1Data_, pageHeader.uncompressed_page_size, &pool_);
+      // // uncompressedDataV1Data_->copyFrom(rowGroupPageInfo_.uncompressedDataV1Data.get(), rowGroupPageInfo_.uncompressedDataV1Data->size());
+      // memcpy(uncompressedDataV1Data_->asMutable<char>(), rowGroupPageInfo_.uncompressedDataV1Data->asMutable<char>(), pageHeader.uncompressed_page_size);
+      
+    }
     pageData_ = uncompressedDataV1Data_->as<char>();
   }
   numRepDefsInPage_ = pageHeader.data_page_header.num_values;
@@ -1182,6 +1276,7 @@ QplPageReader::readNulls(int32_t numValues, BufferPtr& buffer) {
 }
 
 void QplPageReader::startVisit(folly::Range<const vector_size_t*> rows) {
+  // std::cout << "startVisit" << std::endl;
   visitorRows_ = rows.data();
   numVisitorRows_ = rows.size();
   currentVisitorRow_ = 0;
@@ -1198,6 +1293,11 @@ bool QplPageReader::rowsForPage(
   if (currentVisitorRow_ == numVisitorRows_) {
     return false;
   }
+    // std::cout  << ", numVisitorRows_: " << numVisitorRows_  \
+    //         //  << ", visitBase_: " << visitBase_ << ", visitorRows_[currentVisitorRow_]: " << visitorRows_[currentVisitorRow_] << "rowsForPage, currentVisitorRow_: " << currentVisitorRow_
+    //         << ", rowOfPage_: " << rowOfPage_ << ", numRowsInPage_: " << numRowsInPage_ << ", rowZero: " << visitBase_ + visitorRows_[currentVisitorRow_] \
+    //     << ", rowGroupPageInfo_.visitedRows: " << rowGroupPageInfo_.visitedRows << ", numValues in row group: " << rowGroupPageInfo_.numValues \
+    //     << std::endl;
   int32_t numToVisit;
   // Check if the first row to go to is in the current page. If not, seek to the
   // page that contains the row.
@@ -1207,6 +1307,8 @@ bool QplPageReader::rowsForPage(
     if (hasChunkRepDefs_) {
       numLeafNullsConsumed_ = rowOfPage_;
     }
+    prefetchNextPage();
+    rowGroupPageInfo_.visitedRows += numRowsInPage_;
   }
   auto& scanState = reader.scanState();
   if (isDictionary()) {
