@@ -372,6 +372,20 @@ const char* FOLLY_NONNULL QplPageReader::uncompressData(
     case thrift::CompressionCodec::GZIP: {
       dwio::common::ensureCapacity<char>(
           uncompressedData_, uncompressedSize, &pool_);
+      auto qpl_job_id = this->DecompressAsync(
+        compressedSize,
+        (const uint8_t*)pageData,
+        uncompressedSize,
+        (uint8_t *)uncompressedData_->asMutable<char>(),
+        true);
+      if (qpl_job_id < dwio::common::QplJobHWPool::GetInstance().MAX_JOB_NUMBER) {
+        dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
+        if (qpl_wait_job(qpl_job_pool.GetJobById(qpl_job_id)) == QPL_STS_OK) {
+          qpl_job_pool.ReleaseJob(qpl_job_id);
+          return uncompressedData_->as<char>();
+        }
+        qpl_job_pool.ReleaseJob(qpl_job_id);
+      }
       z_stream stream;
       memset(&stream, 0, sizeof(stream));
       constexpr int WINDOW_BITS = 15;
