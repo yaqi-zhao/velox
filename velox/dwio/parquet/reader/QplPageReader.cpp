@@ -66,9 +66,7 @@ void QplPageReader::prefetchNextPage() {
   if (rowGroupPageInfo_.visitedRows + numRowsInPage_ >= rowGroupPageInfo_.numValues) {
     return;
   }
-  // std::cout << "rowGroupPageInfo_.visitedRows: " << rowGroupPageInfo_.visitedRows << ", numRowsInPage_: "\
-  //  << numRowsInPage_ << ", rowGroupPageInfo_.numValues: " << rowGroupPageInfo_.numValues \
-  //  << ", type_->parquetType_.value(): " << type_->parquetType_.value() << std::endl;
+
   if (chunkSize_ <= pageStart_) {
     // std::cout << "Not support error: chunkSize_: " << chunkSize_ << " pageStart_" << pageStart_ << std::endl;
     // This may happen if seeking to exactly end of row group.
@@ -152,7 +150,6 @@ void QplPageReader::seekToPage(int64_t row) {
       break;
     }
     PageHeader pageHeader = readPageHeader();
-    // std::cout << "readPageHeader" << std::endl;
     pageStart_ = pageDataStart_ + pageHeader.compressed_page_size;
 
     switch (pageHeader.type) {
@@ -184,13 +181,10 @@ void QplPageReader::seekToPage(int64_t row) {
 }
 
 bool QplPageReader::readPageHeader_1(PageHeader& pageHeader) {
-  // printf("bufferStart_ %p bufferEnd_ %p", bufferStart_, bufferEnd_);
-  // std::cout << "bufferEnd_ - bufferStart_: " << bufferEnd_ - bufferStart_;
   if (bufferEnd_ == bufferStart_) {
     const void* buffer;
     int32_t size;
     inputStream_->Next(&buffer, &size);
-    // std::cout << ", size:" << size;
     bufferStart_ = reinterpret_cast<const char*>(buffer);
     bufferEnd_ = bufferStart_ + size;
   }
@@ -205,21 +199,16 @@ bool QplPageReader::readPageHeader_1(PageHeader& pageHeader) {
       transport);
   uint64_t readBytes;
   readBytes = pageHeader.read(&protocol);
-  // std::cout << ", readBytes: " << readBytes << std::endl;;
 
   pageDataStart_ = pageStart_ + readBytes;
-  // std::cout << ", pageDataStart_: " << pageDataStart_ << std::endl;
   return true;
 }
 
 PageHeader QplPageReader::readPageHeader() {
-  // printf("bufferStart_ %p bufferEnd_ %p", bufferStart_, bufferEnd_)
-  // std::cout << "bufferEnd_ - bufferStart_: " << bufferEnd_ - bufferStart_;
   if (bufferEnd_ == bufferStart_) {
     const void* buffer;
     int32_t size;
     inputStream_->Next(&buffer, &size);
-    // std::cout << ", size:" << size;
     bufferStart_ = reinterpret_cast<const char*>(buffer);
     bufferEnd_ = bufferStart_ + size;
   }
@@ -231,10 +220,8 @@ PageHeader QplPageReader::readPageHeader() {
       transport);
   uint64_t readBytes;
   readBytes = pageHeader.read(&protocol);
-  // std::cout << ", readBytes: " << readBytes << std::endl;;
 
   pageDataStart_ = pageStart_ + readBytes;
-  // std::cout << ", pageDataStart_: " << pageDataStart_ << std::endl;
   return pageHeader;
 }
 
@@ -372,6 +359,20 @@ const char* FOLLY_NONNULL QplPageReader::uncompressData(
     case thrift::CompressionCodec::GZIP: {
       dwio::common::ensureCapacity<char>(
           uncompressedData_, uncompressedSize, &pool_);
+      auto qpl_job_id = this->DecompressAsync(
+        compressedSize,
+        (const uint8_t*)pageData,
+        uncompressedSize,
+        (uint8_t *)uncompressedData_->asMutable<char>(),
+        true);
+      if (qpl_job_id < dwio::common::QplJobHWPool::GetInstance().MAX_JOB_NUMBER) {
+        dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
+        if (qpl_wait_job(qpl_job_pool.GetJobById(qpl_job_id)) == QPL_STS_OK) {
+          qpl_job_pool.ReleaseJob(qpl_job_id);
+          return uncompressedData_->as<char>();
+        }
+        qpl_job_pool.ReleaseJob(qpl_job_id);
+      }
       z_stream stream;
       memset(&stream, 0, sizeof(stream));
       constexpr int WINDOW_BITS = 15;
@@ -1170,6 +1171,8 @@ void QplPageReader::skip(int64_t numRows) {
       numLeafNullsConsumed_ = rowOfPage_;
     }
     toSkip -= rowOfPage_ - firstUnvisited_;
+    prefetchNextPage();
+    rowGroupPageInfo_.visitedRows += numRowsInPage_;
   }
   firstUnvisited_ += numRows;
 
@@ -1221,6 +1224,8 @@ void QplPageReader::skipNullsOnly(int64_t numRows) {
     seekToPage(firstUnvisited_ + numRows);
     firstUnvisited_ += numRows;
     toSkip = firstUnvisited_ - rowOfPage_;
+    prefetchNextPage();
+    rowGroupPageInfo_.visitedRows += numRowsInPage_;
   } else {
     firstUnvisited_ += numRows;
   }
@@ -1241,6 +1246,8 @@ void QplPageReader::readNullsOnly(int64_t numValues, BufferPtr& buffer) {
     if (!availableOnPage) {
       seekToPage(firstUnvisited_);
       availableOnPage = numRowsInPage_;
+      prefetchNextPage();
+      rowGroupPageInfo_.visitedRows += numRowsInPage_;
     }
     auto numRead = std::min(availableOnPage, toRead);
     auto nulls = readNulls(numRead, nullsInReadRange_);
@@ -1276,7 +1283,6 @@ QplPageReader::readNulls(int32_t numValues, BufferPtr& buffer) {
 }
 
 void QplPageReader::startVisit(folly::Range<const vector_size_t*> rows) {
-  // std::cout << "startVisit" << std::endl;
   visitorRows_ = rows.data();
   numVisitorRows_ = rows.size();
   currentVisitorRow_ = 0;
@@ -1293,11 +1299,6 @@ bool QplPageReader::rowsForPage(
   if (currentVisitorRow_ == numVisitorRows_) {
     return false;
   }
-    // std::cout  << ", numVisitorRows_: " << numVisitorRows_  \
-    //         //  << ", visitBase_: " << visitBase_ << ", visitorRows_[currentVisitorRow_]: " << visitorRows_[currentVisitorRow_] << "rowsForPage, currentVisitorRow_: " << currentVisitorRow_
-    //         << ", rowOfPage_: " << rowOfPage_ << ", numRowsInPage_: " << numRowsInPage_ << ", rowZero: " << visitBase_ + visitorRows_[currentVisitorRow_] \
-    //     << ", rowGroupPageInfo_.visitedRows: " << rowGroupPageInfo_.visitedRows << ", numValues in row group: " << rowGroupPageInfo_.numValues \
-    //     << std::endl;
   int32_t numToVisit;
   // Check if the first row to go to is in the current page. If not, seek to the
   // page that contains the row.
