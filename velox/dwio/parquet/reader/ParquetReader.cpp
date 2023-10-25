@@ -479,7 +479,7 @@ void ReaderBase::scheduleRowGroups(
     // std::cout << "load row group " << thisGroup << ", file: " << this->bufferedInput().getReadFile()->getName() << std::endl;
     newInput->load(dwio::common::LogType::STRIPE);
     inputs_[thisGroup] = std::move(newInput);
-    reader.preDecompRowGroup(thisGroup);
+    reader.preDecompRowGroup(thisGroup, *newInput);
   }
   for (auto counter = 0; counter < FLAGS_parquet_prefetch_rowgroups;
        ++counter) {
@@ -490,7 +490,7 @@ void ReaderBase::scheduleRowGroups(
         newInput->load(dwio::common::LogType::STRIPE);
         // std::cout << "pre load row group " << counter << std::endl;
         inputs_[nextGroup] = std::move(newInput);
-        reader.preDecompRowGroup(nextGroup);
+        reader.preDecompRowGroup(nextGroup, *newInput);
       }
     } else {
       break;

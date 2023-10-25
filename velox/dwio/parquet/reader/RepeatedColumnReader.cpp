@@ -84,6 +84,22 @@ void skipUnreadLengthsAndNulls(dwio::common::SelectiveColumnReader& reader) {
   }
 }
 
+void preDecompChild(
+    dwio::common::SelectiveColumnReader* reader,
+    uint32_t index,
+    dwio::common::BufferedInput& input) {
+#ifdef VELOX_ENABLE_QPL       
+  auto children = reader->children();
+  if (children.empty()) {
+    reader->formatData().as<ParquetData>().preDecompRowGroup(index);
+    return;
+  }
+  for (auto* child : children) {
+    preDecompChild(child, index, input);
+  }
+#endif  
+}
+
 void enqueueChildren(
     dwio::common::SelectiveColumnReader* reader,
     uint32_t index,
@@ -151,6 +167,10 @@ void MapColumnReader::enqueueRowGroup(
     uint32_t index,
     dwio::common::BufferedInput& input) {
   enqueueChildren(this, index, input);
+}
+
+void MapColumnReader::preDecompRowGroup(uint32_t index, dwio::common::BufferedInput& input) {
+  preDecompChild(this, index, input);
 }
 
 void MapColumnReader::seekToRowGroup(uint32_t index) {
@@ -267,6 +287,10 @@ void ListColumnReader::enqueueRowGroup(
     uint32_t index,
     dwio::common::BufferedInput& input) {
   enqueueChildren(this, index, input);
+}
+
+void ListColumnReader::preDecompRowGroup(uint32_t index, dwio::common::BufferedInput& input) {
+  preDecompChild(this, index, input);
 }
 
 void ListColumnReader::seekToRowGroup(uint32_t index) {

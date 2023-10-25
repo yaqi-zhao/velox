@@ -166,15 +166,15 @@ void StructColumnReader::enqueueRowGroup(
   }
 }
 
-void StructColumnReader::preDecompRowGroup(uint32_t index) {
+void StructColumnReader::preDecompRowGroup(uint32_t index, dwio::common::BufferedInput& input) {
 #ifdef VELOX_ENABLE_QPL 
   for (auto& child : children_) {
     if (auto structChild = dynamic_cast<StructColumnReader*>(child)) {
-      continue;
+      structChild->preDecompRowGroup(index, input);
     } else if (auto listChild = dynamic_cast<ListColumnReader*>(child)) {
-      continue;
+      listChild->preDecompRowGroup(index, input);
     } else if (auto mapChild = dynamic_cast<MapColumnReader*>(child)) {
-      continue;
+      mapChild->preDecompRowGroup(index, input);
     } else {
       child->formatData().as<ParquetData>().preDecompRowGroup(index);
     }
