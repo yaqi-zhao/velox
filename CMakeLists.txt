@@ -106,6 +106,7 @@ option(
   VELOX_ENABLE_INT64_BUILD_PARTITION_BOUND
   "make buildPartitionBounds_ a vector int64 instead of int32 to avoid integer overflow when the hashtable has billions of records"
   OFF)
+option(VELOX_ENABLE_INTEL_IAA "Enable Intel IAA support" OFF)
 
 # Explicitly force compilers to generate colored output. Compilers usually do
 # this by default if they detect the output is a terminal, but this assumption
@@ -263,6 +264,11 @@ if(VELOX_ENABLE_REMOTE_FUNCTIONS)
   find_package(fizz CONFIG REQUIRED)
   find_package(wangle CONFIG REQUIRED)
   find_package(FBThrift CONFIG REQUIRED)
+endif()
+
+if(VELOX_ENABLE_INTEL_IAA)
+  add_definitions(-DVELOX_ENABLE_INTEL_IAA)
+  message(STATUS "Intel IAA acceleration enabled")
 endif()
 
 # define processor variable for conditional compilation
@@ -468,6 +474,11 @@ if(NOT ${VELOX_BUILD_MINIMAL})
   set_source(Protobuf)
   resolve_dependency(Protobuf 3.21 EXACT)
   include_directories(${Protobuf_INCLUDE_DIRS})
+endif()
+
+if(VELOX_ENABLE_INTEL_IAA)
+  set_source(inteliaa)
+  resolve_dependency(inteliaa)
 endif()
 
 # GCC needs to link a library to enable std::filesystem.
