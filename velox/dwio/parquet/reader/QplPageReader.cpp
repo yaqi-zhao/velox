@@ -288,7 +288,7 @@ uint32_t QplPageReader::DecompressAsync(int64_t input_length, const uint8_t* inp
     job->available_out = output_buffer_length;
     job->flags = QPL_FLAG_FIRST | QPL_FLAG_LAST;
     if (isGzip) {
-      job->flags |= QPL_FLAG_GZIP_MODE;
+      job->flags |= QPL_FLAG_ZLIB_MODE;
     }
     
     qpl_status status = qpl_submit_job(job);
@@ -305,7 +305,7 @@ uint32_t QplPageReader::DecompressAsync(int64_t input_length, const uint8_t* inp
       job->available_out = output_buffer_length;
       job->flags = QPL_FLAG_FIRST | QPL_FLAG_LAST;
       if (isGzip) {
-        job->flags |= QPL_FLAG_GZIP_MODE;
+        job->flags |= QPL_FLAG_ZLIB_MODE;
       }
 
       _umwait(1, __rdtsc() + 1000);
@@ -1424,7 +1424,6 @@ bool QplPageReader::waitQplJob(uint32_t job_id) {
       check_time++;
   } 
   
-  qpl_fini_job(job);
   qpl_job_pool.ReleaseJob(job_id);
   if (status != QPL_STS_OK) {
       return false;   
@@ -1436,13 +1435,11 @@ QplPageReader::~QplPageReader() {
     dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
     if (dict_qpl_job_id > 0 && dict_qpl_job_id < qpl_job_pool.MAX_JOB_NUMBER) {
         qpl_job* job = qpl_job_pool.GetJobById(dict_qpl_job_id);
-        qpl_fini_job(job);
         qpl_job_pool.ReleaseJob(dict_qpl_job_id);
         dict_qpl_job_id = 0;
     }
     if (data_qpl_job_id > 0 && data_qpl_job_id < qpl_job_pool.MAX_JOB_NUMBER) {
         qpl_job* job = qpl_job_pool.GetJobById(data_qpl_job_id);
-        qpl_fini_job(job);
         qpl_job_pool.ReleaseJob(data_qpl_job_id);
         data_qpl_job_id = 0;        
     }
