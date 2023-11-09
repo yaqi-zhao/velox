@@ -204,6 +204,8 @@ PARQUET_BENCHMARKS(BIGINT(), BigInt);
 
 int main(int argc, char** argv) {
     // sleep(8);
+  FLAGS_path_to_file=argv[1];
+  FLAGS_output_path=argv[2];
   folly::init(&argc, &argv);
   folly::runBenchmarks();
   return 0;
