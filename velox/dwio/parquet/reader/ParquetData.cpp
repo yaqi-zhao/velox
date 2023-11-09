@@ -103,7 +103,7 @@ bool ParquetData::preDecompRowGroup(uint32_t index) {
   }
 
   pageReaders_.resize(rowGroups_.size());
-  auto iaaPageReader = std::make_unique<PageReader>(
+  auto iaaPageReader = std::make_unique<IAAPageReader>(
       std::move(streams_[index]),
       pool_,
       type_,
