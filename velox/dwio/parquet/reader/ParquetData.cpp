@@ -18,9 +18,6 @@
 
 #include "velox/dwio/common/BufferedInput.h"
 #include "velox/dwio/parquet/reader/Statistics.h"
-#ifdef VELOX_ENABLE_INTEL_IAA
-#include "velox/dwio/common/QplJobPool.h"
-#endif
 
 namespace facebook::velox::parquet {
 
@@ -88,11 +85,7 @@ bool ParquetData::rowGroupMatches(
 }
 
 bool ParquetData::preDecompRowGroup(uint32_t index) {
-#ifdef VELOX_ENABLE_INTEL_IAA
-  if (!dwio::common::QplJobHWPool::getInstance().job_ready()) {
-    return false;
-  }
-#else
+#ifndef VELOX_ENABLE_INTEL_IAA
   return false;
 #endif
   auto& metaData = rowGroups_[index].columns[type_->column()].meta_data;
@@ -103,7 +96,7 @@ bool ParquetData::preDecompRowGroup(uint32_t index) {
   }
 
   pageReaders_.resize(rowGroups_.size());
-  auto iaaPageReader = std::make_unique<PageReader>(
+  auto iaaPageReader = std::make_unique<IAAPageReader>(
       std::move(streams_[index]),
       pool_,
       type_,

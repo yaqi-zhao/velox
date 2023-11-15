@@ -16,17 +16,12 @@
 
 #include "velox/dwio/common/QplJobPool.h"
 #include <folly/Random.h>
-#include <iostream>
 #include "velox/common/base/Exceptions.h"
 
 namespace facebook::velox::dwio::common {
 
-// std::array<qpl_job*, QplJobHWPool::MAX_JOB_NUMBER>
-//     QplJobHWPool::hwJobPtrPool;
 std::array<std::atomic<bool>, QplJobHWPool::MAX_JOB_NUMBER>
     QplJobHWPool::hwJobPtrLocks;
-// bool QplJobHWPool::iaa_job_ready = false;
-// std::unique_ptr<uint8_t[]> QplJobHWPool::hwJobsBuffer;
 
 QplJobHWPool& QplJobHWPool::getInstance() {
   static QplJobHWPool pool;
@@ -49,6 +44,9 @@ QplJobHWPool::~QplJobHWPool() {
   iaaJobReady = false;
 }
 
+/**
+ * Allocate qpl job and put it into hwJobPtrPool
+ */
 void QplJobHWPool::allocateQPLJob() {
   uint32_t job_size = 0;
 
@@ -60,6 +58,7 @@ void QplJobHWPool::allocateQPLJob() {
 
   // Initialize pool for storing all job object pointers
   // Allocate buffer by shifting address offset for each job object.
+  hwJobPtrPool.resize(MAX_JOB_NUMBER);
   for (uint32_t i = 0; i < MAX_JOB_NUMBER; ++i) {
     qpl_job* qplJobPtr =
         reinterpret_cast<qpl_job*>(hwJobsBuffer.get() + i * job_size);
