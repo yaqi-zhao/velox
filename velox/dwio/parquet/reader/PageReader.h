@@ -22,6 +22,7 @@
 #include "velox/dwio/common/SelectiveColumnReader.h"
 #include "velox/dwio/common/compression/Compression.h"
 #include "velox/dwio/parquet/reader/BooleanDecoder.h"
+#include "velox/dwio/parquet/reader/PageReaderBase.h"
 #include "velox/dwio/parquet/reader/ParquetTypeWithId.h"
 #include "velox/dwio/parquet/reader/RleBpDataDecoder.h"
 #include "velox/dwio/parquet/reader/StringDecoder.h"
@@ -33,7 +34,7 @@ namespace facebook::velox::parquet {
 /// Manages access to pages inside a ColumnChunk. Interprets page headers and
 /// encodings and presents the combination of pages and encoded values as a
 /// continuous stream accessible via readWithVisitor().
-class PageReader {
+class PageReader : public PageReaderBase {
  public:
   PageReader(
       std::unique_ptr<dwio::common::SeekableInputStream> stream,
@@ -67,6 +68,10 @@ class PageReader {
         codec_(codec),
         chunkSize_(chunkSize),
         nullConcatenation_(pool_) {}
+
+  PageReaderType getType() {
+    return PageReaderType::Common;
+  };
 
   /// Advances 'numRows' top level rows.
   void skip(int64_t numRows);
@@ -132,7 +137,7 @@ class PageReader {
   // bufferEnd_ to the corresponding positions.
   thrift::PageHeader readPageHeader();
 
- private:
+ protected:
   // Indicates that we only want the repdefs for the next page. Used when
   // prereading repdefs with seekToPage.
   static constexpr int64_t kRepDefOnly = -1;
@@ -164,7 +169,7 @@ class PageReader {
   // is interpreted in terms of leaf rows, including leaf
   // nulls. Seeking ahead of pages covered by decodeRepDefs is not
   // allowed for non-top level columns.
-  void seekToPage(int64_t row);
+  virtual void seekToPage(int64_t row);
 
   // Preloads the repdefs for the column chunk. To avoid preloading,
   // would need a way too clone the input stream so that one stream

@@ -13,7 +13,13 @@
 # limitations under the License.
 
 add_library(velox_dwio_common_compression Compression.cpp PagedInputStream.cpp
-                                          PagedOutputStream.cpp)
+                                          PagedOutputStream.cpp IAACompression.cpp)
 
 target_link_libraries(velox_dwio_common_compression velox_dwio_common xsimd
                       gtest Folly::folly)
+
+if(VELOX_ENABLE_INTEL_IAA)
+  add_library(velox_dwio_common_iaa_compression IAACompression.cpp)
+  target_link_libraries(velox_dwio_common_iaa_compression Folly::folly xsimd)
+  target_link_libraries(velox_dwio_common_compression velox_dwio_common_iaa_compression)
+endif()
