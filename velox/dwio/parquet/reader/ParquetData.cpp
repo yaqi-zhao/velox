@@ -135,7 +135,7 @@ dwio::common::PositionProvider ParquetData::seekToRowGroup(uint32_t index) {
   VELOX_CHECK_LT(index, streams_.size());
   auto& metadata = rowGroups_[index].columns[type_->column].meta_data;
 #ifdef VELOX_ENABLE_QPL    
-  if (metadata.codec == thrift::CompressionCodec::GZIP && pageReaders_[index] != nullptr) {
+  if (metadata.codec == thrift::CompressionCodec::GZIP && pageReaders_.size() > index && pageReaders_[index] != nullptr) {
     qplReader_ = std::move(pageReaders_[index]);
   } else 
 #endif
