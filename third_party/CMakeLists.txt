@@ -39,7 +39,7 @@ if(VELOX_ENABLE_QPL)
 
   ExternalProject_Add(qpl_ep
                       ${EP_LOG_OPTIONS}
-                      URL https://github.com/intel/qpl/archive/refs/tags/v1.1.0.tar.gz
+                      URL https://github.com/intel/qpl/archive/refs/tags/v1.3.0.tar.gz
                       PATCH_COMMAND ${QPL_PATCH_COMMAND}
                       BUILD_BYPRODUCTS "${QPL_STATIC_LIB}"
                       CMAKE_ARGS ${QPL_CMAKE_ARGS}

@@ -38,6 +38,7 @@
 
 DEFINE_string(path_to_file, "path", "path to file");
 DEFINE_string(output_path, "path", "path to file");
+DEFINE_string(gzip_format, "zlib", "Data format");
 using std::chrono::system_clock;
 using namespace facebook::velox;
 using namespace facebook::velox::dwio;
@@ -96,7 +97,11 @@ class ParquetTransferBenchmark {
     /** -----------------writer----------------**/
     auto gzip_codec_options = std::make_shared<::arrow::util::GZipCodecOptions>();
     gzip_codec_options->window_bits = 12;
-    gzip_codec_options->gzip_format = ::arrow::util::GZipFormat::ZLIB;
+    if (FLAGS_gzip_format.compare("zlib") == 0) {
+      gzip_codec_options->gzip_format = ::arrow::util::GZipFormat::ZLIB;
+    } else {
+      gzip_codec_options->gzip_format = ::arrow::util::GZipFormat::GZIP;
+    }
     std::shared_ptr<::parquet::WriterProperties> writerProperties;
     writerProperties = ::parquet::WriterProperties::Builder()
       .compression(::parquet::Compression::GZIP)
