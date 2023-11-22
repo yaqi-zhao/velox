@@ -313,7 +313,7 @@ uint32_t QplPageReader::DecompressAsync(int64_t input_length, const uint8_t* inp
     }
     if (status != QPL_STS_OK) {
         qpl_job_pool.ReleaseJob(job_id);
-        LOG(WARNING) << "cannot submit job because of QPL_STS_QUEUES_ARE_BUSY_ERR ";
+        LOG(WARNING) << "qpl_submit_job false: " << status;
         return qpl_job_pool.MAX_JOB_NUMBER; // Invalid job id to illustrate the failed decompress job.
     } else {
       return job_id;
