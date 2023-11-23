@@ -1424,7 +1424,7 @@ bool QplPageReader::waitQplJob(uint32_t job_id) {
       check_time++;
   } 
   
-  qpl_fini_job(job);
+  // qpl_fini_job(job);
   qpl_job_pool.ReleaseJob(job_id);
   if (status != QPL_STS_OK) {
     LOG(WARNING) << "Qpl job execution failed, status: " << status;
@@ -1437,13 +1437,13 @@ QplPageReader::~QplPageReader() {
     dwio::common::QplJobHWPool& qpl_job_pool = dwio::common::QplJobHWPool::GetInstance();
     if (dict_qpl_job_id > 0 && dict_qpl_job_id < qpl_job_pool.MAX_JOB_NUMBER) {
         qpl_job* job = qpl_job_pool.GetJobById(dict_qpl_job_id);
-        qpl_fini_job(job);
+        // qpl_fini_job(job);
         qpl_job_pool.ReleaseJob(dict_qpl_job_id);
         dict_qpl_job_id = 0;
     }
     if (data_qpl_job_id > 0 && data_qpl_job_id < qpl_job_pool.MAX_JOB_NUMBER) {
         qpl_job* job = qpl_job_pool.GetJobById(data_qpl_job_id);
-        qpl_fini_job(job);
+        // qpl_fini_job(job);
         qpl_job_pool.ReleaseJob(data_qpl_job_id);
         data_qpl_job_id = 0;        
     }
