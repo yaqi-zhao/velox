@@ -38,7 +38,7 @@
 
 DEFINE_string(path_to_file, "path", "path to file");
 DEFINE_string(output_path, "path", "path to file");
-DEFINE_string(gzip_format, "zlib", "Data format");
+DEFINE_string(compression_format, "zlib", "Data format");
 using std::chrono::system_clock;
 using namespace facebook::velox;
 using namespace facebook::velox::dwio;
@@ -64,7 +64,7 @@ class ParquetTransferBenchmark {
   arrow::Result<int> writeToFile1() {
     // Configure general Parquet reader settings
     arrow::MemoryPool* pool = arrow::default_memory_pool();
-    const int64_t batch_size = 60000;
+    const int64_t batch_size = 1024*1024;
 
     /*-------------batch reader----------------------*/
     ::parquet::ArrowReaderProperties properties = ::parquet::default_arrow_reader_properties();
@@ -95,19 +95,36 @@ class ParquetTransferBenchmark {
     int64_t total_rows = table->num_rows();
 
     /** -----------------writer----------------**/
-    auto gzip_codec_options = std::make_shared<::arrow::util::GZipCodecOptions>();
-    gzip_codec_options->window_bits = 12;
-    if (FLAGS_gzip_format.compare("zlib") == 0) {
-      gzip_codec_options->gzip_format = ::arrow::util::GZipFormat::ZLIB;
-    } else {
-      gzip_codec_options->gzip_format = ::arrow::util::GZipFormat::GZIP;
-    }
     std::shared_ptr<::parquet::WriterProperties> writerProperties;
-    writerProperties = ::parquet::WriterProperties::Builder()
-      .compression(::parquet::Compression::GZIP)
-      ->codec_options(gzip_codec_options)
-      ->build();
-
+    if(compressionFlag.compare("gzip") == 0) {
+        auto gzip_codec_options = std::make_shared<::arrow::util::GZipCodecOptions>();
+        gzip_codec_options->window_bits = 12;
+        gzip_codec_options->gzip_format = ::arrow::util::GZipFormat::GZIP;
+        std::cout << "this is GZIP" << std::endl;
+        writerProperties = ::parquet::WriterProperties::Builder()
+        .compression(::parquet::Compression::GZIP)
+        ->codec_options(gzip_codec_options)
+        ->build();
+    }
+    else if(compressionFlag.compare("zlib") == 0) {
+        auto gzip_codec_options = std::make_shared<::arrow::util::GZipCodecOptions>();
+        gzip_codec_options->window_bits = 12;
+        gzip_codec_options->gzip_format = ::arrow::util::GZipFormat::ZLIB;
+        std::cout << "this is ZLIB" << std::endl;
+        writerProperties = ::parquet::WriterProperties::Builder()
+        .compression(::parquet::Compression::GZIP)
+        ->codec_options(gzip_codec_options)
+        ->build();
+    }
+    else if(compressionFlag.compare("zstd") == 0) {
+        std::cout << "this is ZSTD" << std::endl;
+        writerProperties = ::parquet::WriterProperties::Builder()
+        .compression(::parquet::Compression::ZSTD)
+        ->build();
+    }
+    else {
+      std::cout << "don't support: " << compressionFlag << std::endl;
+    }
     // Opt to store Arrow schema for easier reads back into Arrow
     std::shared_ptr<::parquet::ArrowWriterProperties> arrow_props =
         ::parquet::ArrowWriterProperties::Builder().store_schema()->build();
