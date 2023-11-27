@@ -96,7 +96,7 @@ class ParquetTransferBenchmark {
 
     /** -----------------writer----------------**/
     std::shared_ptr<::parquet::WriterProperties> writerProperties;
-    if(compressionFlag.compare("gzip") == 0) {
+    if(FLAGS_compression_format.compare("gzip") == 0) {
         auto gzip_codec_options = std::make_shared<::arrow::util::GZipCodecOptions>();
         gzip_codec_options->window_bits = 12;
         gzip_codec_options->gzip_format = ::arrow::util::GZipFormat::GZIP;
@@ -106,7 +106,7 @@ class ParquetTransferBenchmark {
         ->codec_options(gzip_codec_options)
         ->build();
     }
-    else if(compressionFlag.compare("zlib") == 0) {
+    else if(FLAGS_compression_format.compare("zlib") == 0) {
         auto gzip_codec_options = std::make_shared<::arrow::util::GZipCodecOptions>();
         gzip_codec_options->window_bits = 12;
         gzip_codec_options->gzip_format = ::arrow::util::GZipFormat::ZLIB;
@@ -116,14 +116,14 @@ class ParquetTransferBenchmark {
         ->codec_options(gzip_codec_options)
         ->build();
     }
-    else if(compressionFlag.compare("zstd") == 0) {
+    else if(FLAGS_compression_format.compare("zstd") == 0) {
         std::cout << "this is ZSTD" << std::endl;
         writerProperties = ::parquet::WriterProperties::Builder()
         .compression(::parquet::Compression::ZSTD)
         ->build();
     }
     else {
-      std::cout << "don't support: " << compressionFlag << std::endl;
+      std::cout << "don't support: " << FLAGS_ << std::endl;
     }
     // Opt to store Arrow schema for easier reads back into Arrow
     std::shared_ptr<::parquet::ArrowWriterProperties> arrow_props =
